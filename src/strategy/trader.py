@@ -104,8 +104,10 @@ class TradingEngine:
 
         sol_amount = sol_balance * (recommended_pct / 100) * multiplier
 
-        # Minimum trade: 0.01 SOL
-        if sol_amount < 0.01:
+        # Minimum trade size (avoid fee-eaten micro trades)
+        min_trade = self.config.min_trade_sol
+        if sol_amount < min_trade:
+            logger.info(f"Trade size {sol_amount:.4f} SOL below minimum {min_trade} SOL — skipping")
             return 0.0
 
         logger.info(
