@@ -109,7 +109,7 @@ Uses Python dataclasses for type-safe configuration:
 
 - **LLMConfig**: API key, base URL, model name, temperature, max tokens
 - **WalletConfig**: Solana private key, wallet address, RPC URL
-- **TradingConfig**: Position sizing (max 5%), stop loss (15%), take profit levels (30%/60%), minimum holders, slippage
+- **TradingConfig**: Position sizing (max 15%), stop loss (20%), take profit levels (25%/50%), min trade size (0.1 SOL), slippage (15%)
 - **TwitterConfig**: API keys for X/Twitter posting with `is_configured` property
 - **AppConfig**: Master config combining all sub-configs, loaded from environment via `from_env()` classmethod
 
@@ -189,11 +189,24 @@ If Guard votes STRONG_SELL with confidence > 60%, the Judge's decision is overri
 
 Manages the full trading lifecycle:
 
-**Position Sizing**:
-- Based on portfolio percentage from debate recommendation
-- Signal multipliers: STRONG_BUY=1.0, BUY=0.7, HOLD/SELL=0.0
-- Capped at max_position_pct from config (default 5%)
-- Minimum trade: 0.01 SOL
+**Position Sizing** (`calculate_position_size()`):
+
+The agent automatically checks your SOL balance and calculates the optimal trade size:
+
+```
+Trade Size = SOL_Balance × (max_position_pct / 100) × signal_multiplier
+```
+
+| Signal | Multiplier | Example (1 SOL balance, 15% max) |
+|--------|------------|----------------------------------|
+| STRONG_BUY | × 100% | 1 × 15% × 1.0 = **0.15 SOL** (~$22) |
+| BUY | × 70% | 1 × 15% × 0.7 = **0.105 SOL** (~$16) |
+| HOLD | × 0% | **No trade** |
+| SELL | × 0% | **No trade** |
+
+**Fee-Aware Minimum**: Trades below `MIN_TRADE_SOL` (default: 0.1 SOL) are automatically skipped to prevent micro trades where fees eat all profit.
+
+> **Why 0.1 SOL minimum?** On Solana DEX, a typical swap costs ~0.001 SOL in fees + slippage. For a 0.01 SOL trade, that's 10% lost to fees before any price movement. With 0.1 SOL minimum, fees are only ~1%.
 
 **Swap Execution Flow** (5-step BWS process):
 1. `get_quote()` — Get swap quote for token pair
@@ -202,12 +215,21 @@ Manages the full trading lifecycle:
 4. `sign_transaction()` — Sign with wallet private key
 5. `send_transaction()` — Submit to Solana network
 
-**Portfolio Management**:
+**Portfolio Management (Auto TP/SL)**:
 - Tracks all open positions with entry price, amount, timestamps
-- Take Profit 1 (TP1): +30% → sell 50% of position
-- Take Profit 2 (TP2): +60% → sell remaining position
-- Stop Loss (SL): -15% → sell entire position
+- **Take Profit 1 (TP1)**: +25% → sell 50% of position (lock profits)
+- **Take Profit 2 (TP2)**: +50% → sell remaining position (maximize gains)
+- **Stop Loss (SL)**: -20% → sell entire position (protect capital)
 - `check_positions()` — Periodic check for TP/SL triggers
+
+**Example Trade Lifecycle** (wallet balance: 1 SOL):
+```
+1. Council votes STRONG_BUY on $MEME → Trade size: 0.15 SOL
+2. Swap: 0.15 SOL → 150,000 $MEME via Jupiter
+3. Price rises +25% → TP1: sell 75,000 $MEME → receive 0.09375 SOL
+4. Price rises +50% → TP2: sell 75,000 $MEME → receive 0.1125 SOL
+5. Total received: 0.20625 SOL from 0.15 SOL spent = +37.5% profit
+```
 
 **Dry Run Mode**: When no wallet is configured, simulates trades with logging.
 
@@ -249,6 +271,7 @@ FastAPI application with:
 - `GET /api/state` — Full application state (status, stats, debates, trades, tokens)
 - `GET /api/debates` — Recent debate results
 - `GET /api/trades` — Trade history
+- `GET /api/wallet/{address}` — 🆕 Public wallet tracker (SOL balance, token holdings, recent TXs)
 - `POST /api/scan` — Trigger manual scan
 
 **Background Trading Loop** (`run_trading_loop()`):
@@ -259,7 +282,7 @@ FastAPI application with:
 
 ### 4.11 Dashboard UI (dashboard/index.html)
 
-Premium single-page web application:
+Premium single-page web application with **two tabs**:
 
 **Visual Features**:
 - Dark theme with animated gradient orbs background
@@ -270,12 +293,18 @@ Premium single-page web application:
 - Gradient accent colors (green, cyan, purple, yellow, red)
 - Smooth micro-animations on hover and load
 
-**Dashboard Sections**:
+**Tab 1: 🤖 Agent Live** — Real-time trading agent monitor:
 1. **Stats Grid** — 6 cards: Total PnL, Win Rate, Debates, Tokens Scanned, Rugs Avoided, Open Positions
 2. **Live Activity Log** — Real-time event stream with color-coded types (SCAN, DEBATE, TRADE, GUARD)
 3. **Recent Debates** — Detailed debate cards with agent vote bars, signal badges, judge reasoning
 4. **Trade History** — All buy/sell/TP/SL actions with PnL percentage
 5. **Scanned Tokens Grid** — Token cards with symbol, MCap, and liquidity
+
+**Tab 2: 🔍 Wallet Tracker** — Public on-chain wallet lookup:
+- Enter any Solana wallet address (no private key needed)
+- Displays: SOL balance, token holdings (with amounts), last 10 transactions
+- Data fetched directly from Solana mainnet-beta RPC
+- Useful for users to monitor their agent's wallet activity
 
 **Real-time Updates**: Polls `/api/state` every 5 seconds, detects state changes and populates activity log.
 
@@ -287,19 +316,51 @@ Premium single-page web application:
 - Debate council consensus: BUY or STRONG_BUY
 - Overall confidence > 60%
 - Security screening: PASS (no Guard veto)
+- Trade size ≥ MIN_TRADE_SOL (0.1 SOL)
 - Minimum liquidity and holder requirements met
 
 ### Position Management
-- **Max position size**: 5% of portfolio per trade
-- **Take Profit 1**: +30% → sell 50% (lock profits)
-- **Take Profit 2**: +60% → sell remaining
-- **Stop Loss**: -15% → sell entire position
-- **Slippage tolerance**: 15% (configurable)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAX_POSITION_PCT` | **15%** | Max % of SOL balance per trade |
+| `TAKE_PROFIT_1` | **25%** | TP1: sell 50% at +25% gain |
+| `TAKE_PROFIT_2` | **50%** | TP2: sell remaining at +50% gain |
+| `STOP_LOSS` | **20%** | SL: exit entire position at -20% |
+| `MIN_TRADE_SOL` | **0.1** | Min trade size in SOL (fee protection) |
+| `SLIPPAGE_PCT` | **15%** | Slippage tolerance for memecoin swaps |
+| `MIN_LIQUIDITY_USD` | **$5,000** | Min liquidity pool to consider a token |
+| `MIN_HOLDERS` | **50** | Min unique holders |
+| `SCAN_INTERVAL_SECONDS` | **120** | Seconds between scan cycles |
+
+### Recommended Wallet Sizes
+
+| SOL Balance | Max Trade Size | Suitable? |
+|-------------|---------------|----------|
+| 0.5 SOL | 0.075 SOL (~$11) | ⚠️ Marginal (close to min) |
+| 1 SOL | 0.15 SOL (~$22) | ✅ Minimum recommended |
+| 5 SOL | 0.75 SOL (~$112) | ✅ Good |
+| 10 SOL | 1.5 SOL (~$225) | ✅ Optimal |
+
+> **Note**: SOL prices estimated at ~$150. Actual USD values will vary.
+
+### Fee Analysis
+
+| Trade Size | Swap Fee (~0.3%) | Network Fee | Slippage (~2%) | Total Fee % |
+|------------|-----------------|-------------|----------------|-------------|
+| 0.01 SOL | 0.00003 | 0.0005 | 0.0002 | **~7%** ❌ |
+| 0.05 SOL | 0.00015 | 0.0005 | 0.001 | **~3.3%** ⚠️ |
+| 0.1 SOL | 0.0003 | 0.0005 | 0.002 | **~2.8%** ✅ |
+| 0.5 SOL | 0.0015 | 0.0005 | 0.01 | **~2.4%** ✅ |
+| 1.0 SOL | 0.003 | 0.0005 | 0.02 | **~2.4%** ✅ |
+
+> Trades below 0.1 SOL are automatically skipped by the `MIN_TRADE_SOL` setting.
 
 ### Risk Controls
 - Guard Agent veto power (absolute override)
 - Dev rug history check (>50% rugged = reject)
 - Honeypot/tax detection
+- Fee-aware minimum trade size
 - Maximum position size cap
 - Dry run mode for testing
 
@@ -383,14 +444,31 @@ SOLANA_PRIVATE_KEY=your_private_key
 SOLANA_WALLET_ADDRESS=your_wallet_address
 
 # Trading Parameters
-MAX_POSITION_PCT=5
-STOP_LOSS=15
-TAKE_PROFIT_1=30
-TAKE_PROFIT_2=60
-MIN_LIQUIDITY=5000
-MIN_HOLDERS=50
+# ──────────────────────────────────────────
+# MAX_POSITION_PCT: Max % of SOL balance per trade
+#   With 1 SOL → max trade = 0.15 SOL (~$22)
+#   With 10 SOL → max trade = 1.5 SOL (~$225)
+MAX_POSITION_PCT=15
 
-# X/Twitter (optional)
+# Take Profit: Auto-sell when price increases
+TAKE_PROFIT_1=25         # +25% → sell 50% of position
+TAKE_PROFIT_2=50         # +50% → sell remaining 50%
+
+# Stop Loss: Auto-exit when price drops
+STOP_LOSS=20             # -20% → sell 100% immediately
+
+# Min trade size in SOL (prevents fee-eaten micro trades)
+MIN_TRADE_SOL=0.1
+
+# Slippage tolerance for memecoin swaps
+SLIPPAGE_PCT=15
+
+# Token discovery filters
+MIN_LIQUIDITY_USD=5000   # Min liquidity pool ($)
+MIN_HOLDERS=50           # Min unique holders
+SCAN_INTERVAL_SECONDS=120
+
+# X/Twitter (optional — for auto-narration)
 X_API_KEY=
 X_API_SECRET=
 X_ACCESS_TOKEN=
