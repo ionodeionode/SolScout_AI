@@ -255,7 +255,7 @@ Respond in JSON:
   "consensus_score": 0.0-1.0,
   "reasoning": "Your synthesis (2-4 sentences)",
   "should_trade": true | false,
-  "recommended_size_pct": 0.0-5.0,
+  "recommended_size_pct": 0.0-15.0,
   "contrarian_note": "What could go wrong?"
 }}"""
 

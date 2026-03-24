@@ -134,6 +134,9 @@ class TradingEngine:
         logger.info(f"🟢 BUYING ${token.symbol} with {sol_amount} SOL")
 
         try:
+            # Use config slippage (convert % to decimal string)
+            slippage_str = str(self.config.slippage_pct / 100)
+
             # Step 1: Get quote
             quote_result = self.skill.swap_quote(
                 from_address=self.wallet.address,
@@ -158,7 +161,8 @@ class TradingEngine:
             market_id = market.get("id", "")
             protocol = market.get("protocol", "")
             out_amount = float(best.get("outAmount", 0))
-            slippage = best.get("slippageInfo", {}).get("recommendSlippage", "0.01")
+            # Use recommended slippage from quote, fallback to config
+            slippage = best.get("slippageInfo", {}).get("recommendSlippage", slippage_str)
 
             logger.info(
                 f"Quote: {sol_amount} SOL → {out_amount} {token.symbol} "
@@ -296,6 +300,10 @@ class TradingEngine:
         logger.info(f"{'🔴' if reason == 'SL' else '🟢'} SELLING {sell_amount} ${pos.token_symbol} ({reason})")
 
         try:
+            # Use config slippage (convert % to decimal string)
+            slippage_str = str(self.config.slippage_pct / 100)
+
+            # Step 1: Get quote
             quote_result = self.skill.swap_quote(
                 from_address=self.wallet.address,
                 from_chain="sol",
@@ -314,7 +322,62 @@ class TradingEngine:
                 return None
 
             best = quotes[0]
+            market = best.get("market", {})
+            market_id = market.get("id", "")
+            protocol = market.get("protocol", "")
             sol_received = float(best.get("outAmount", 0))
+            # Use recommended slippage from quote, fallback to config
+            slippage = best.get("slippageInfo", {}).get("recommendSlippage", slippage_str)
+
+            logger.info(
+                f"Sell quote: {sell_amount} {pos.token_symbol} → {sol_received} SOL "
+                f"via {market.get('label', market_id)}"
+            )
+
+            # Step 2: Confirm
+            confirm_result = self.skill.swap_confirm(
+                from_chain="sol", from_symbol=pos.token_symbol,
+                from_contract=pos.token_contract, from_amount=str(sell_amount),
+                from_address=self.wallet.address,
+                to_chain="sol", to_symbol=SOL_SYMBOL,
+                to_contract=SOL_CONTRACT, to_address=self.wallet.address,
+                market=market_id, protocol=protocol, slippage=slippage,
+            )
+
+            order_id = confirm_result.get("data", {}).get("orderId", "")
+            if not order_id:
+                logger.error(f"No orderId from sell confirm: {json.dumps(confirm_result)[:200]}")
+                return None
+
+            logger.info(f"Sell confirmed order: {order_id}")
+
+            # Step 3: Make order (get unsigned tx)
+            make_result = self.skill.swap_make_order(
+                order_id=order_id,
+                from_chain="sol", from_contract=pos.token_contract,
+                from_symbol=pos.token_symbol, from_address=self.wallet.address,
+                to_chain="sol", to_contract=SOL_CONTRACT,
+                to_symbol=SOL_SYMBOL, to_address=self.wallet.address,
+                from_amount=str(sell_amount), slippage=slippage,
+                market=market_id, protocol=protocol,
+            )
+
+            txs = make_result.get("data", {}).get("txs", [])
+            if not txs:
+                logger.error(f"No txs from sell makeOrder")
+                return None
+
+            # Step 4: Sign transaction
+            signed_txs = self._sign_transactions(txs)
+            if not signed_txs:
+                logger.error("Sell transaction signing failed")
+                return None
+
+            # Step 5: Send
+            send_result = self.skill.swap_send(order_id, signed_txs)
+            logger.info(f"Sell send result: {json.dumps(send_result)[:200]}")
+
+            # Calculate PnL
             sol_cost = pos.sol_spent * fraction
             pnl_sol = sol_received - sol_cost
             self.total_pnl_sol += pnl_sol
@@ -334,10 +397,12 @@ class TradingEngine:
                 sol_amount=sol_received,
                 pnl_pct=pos.pnl_pct,
                 timestamp=datetime.utcnow().isoformat(),
-                order_id=pos.order_id,
-                reasoning=f"{reason}: PnL {pos.pnl_pct:+.1f}%",
+                order_id=order_id,
+                reasoning=f"{reason}: PnL {pos.pnl_pct:+.1f}% | {pnl_sol:+.4f} SOL",
             )
             self.trade_history.append(trade)
+
+            logger.info(f"✅ SELL complete: {sell_amount} ${pos.token_symbol} → {sol_received} SOL (PnL: {pnl_sol:+.4f} SOL)")
             return trade
 
         except Exception as e:
