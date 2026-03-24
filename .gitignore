@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+vendor/
+*.log
+agent-wallet.json
+node_modules/
+.idea/
+.vscode/
+docs/upload_*.py
+docs/upload_*.ps1

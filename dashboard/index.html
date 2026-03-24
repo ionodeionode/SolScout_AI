@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolScout AI — Multi-Agent Debate Trading Dashboard</title>
+    <meta name="description" content="Real-time autonomous Solana memecoin trading agent with multi-agent debate system. Powered by Bitget Wallet Skill + LLM.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #060a13;
+            --bg-secondary: #0d1321;
+            --bg-card: #111a2e;
+            --bg-card-hover: #172240;
+            --bg-card-inner: #0c1526;
+            --border: #1e2d4a;
+            --border-glow: #1a3a6a;
+            --text-primary: #e8ecf4;
+            --text-secondary: #8892a8;
+            --text-muted: #4a5570;
+            --accent-green: #00f5a0;
+            --accent-green-soft: #00d68a;
+            --accent-green-dim: rgba(0, 245, 160, 0.12);
+            --accent-red: #ff4d6a;
+            --accent-red-dim: rgba(255, 77, 106, 0.12);
+            --accent-blue: #4d8eff;
+            --accent-blue-dim: rgba(77, 142, 255, 0.12);
+            --accent-purple: #a855f7;
+            --accent-purple-dim: rgba(168, 85, 247, 0.12);
+            --accent-yellow: #fbbf24;
+            --accent-yellow-dim: rgba(251, 191, 36, 0.12);
+            --accent-cyan: #22d3ee;
+            --accent-cyan-dim: rgba(34, 211, 238, 0.12);
+            --gradient-main: linear-gradient(135deg, #00f5a0 0%, #00d9f5 50%, #4d8eff 100%);
+            --gradient-bg: radial-gradient(ellipse at 20% 0%, rgba(0,245,160,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(77,142,255,0.05) 0%, transparent 50%);
+            --gradient-card: linear-gradient(145deg, rgba(17,26,46,0.9) 0%, rgba(12,21,38,0.95) 100%);
+            --radius: 14px;
+            --radius-sm: 8px;
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --shadow-glow: 0 0 30px rgba(0,245,160,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            background-image: var(--gradient-bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Animated Background ──────────────── */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(30,45,74,0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(30,45,74,0.15) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+            animation: orbFloat 20s ease-in-out infinite;
+        }
+
+        .bg-orb.orb1 { width: 400px; height: 400px; background: rgba(0,245,160,0.04); top: -100px; left: 10%; animation-delay: 0s; }
+        .bg-orb.orb2 { width: 500px; height: 500px; background: rgba(77,142,255,0.03); bottom: -200px; right: 5%; animation-delay: -7s; }
+        .bg-orb.orb3 { width: 300px; height: 300px; background: rgba(168,85,247,0.03); top: 50%; left: 50%; animation-delay: -14s; }
+
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -20px) scale(1.05); }
+            66% { transform: translate(-20px, 15px) scale(0.95); }
+        }
+
+        /* ── Header ─────────────────────────────── */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(6,10,19,0.85);
+            backdrop-filter: blur(24px) saturate(1.5);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo { display: flex; align-items: center; gap: 14px; }
+
+        .logo-icon {
+            width: 44px; height: 44px;
+            background: var(--gradient-main);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 20px rgba(0,245,160,0.2);
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+
+        @keyframes logoGlow {
+            0%, 100% { box-shadow: 0 4px 20px rgba(0,245,160,0.2); }
+            50% { box-shadow: 0 4px 30px rgba(0,245,160,0.35); }
+        }
+
+        .logo-text {
+            font-size: 22px; font-weight: 800;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; letter-spacing: 0.3px; }
+
+        .header-right { display: flex; align-items: center; gap: 16px; }
+
+        .status-badge {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 18px;
+            border-radius: 24px;
+            font-size: 13px; font-weight: 600;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.idle { background: var(--accent-blue-dim); color: var(--accent-blue); border-color: rgba(77,142,255,0.2); }
+        .status-badge.scanning { background: var(--accent-yellow-dim); color: var(--accent-yellow); border-color: rgba(251,191,36,0.2); }
+        .status-badge.debating { background: var(--accent-purple-dim); color: var(--accent-purple); border-color: rgba(168,85,247,0.2); }
+        .status-badge.trading { background: var(--accent-green-dim); color: var(--accent-green); border-color: rgba(0,245,160,0.2); }
+        .status-badge.error { background: var(--accent-red-dim); color: var(--accent-red); border-color: rgba(255,77,106,0.2); }
+
+        .pulse {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.6); }
+        }
+
+        .cycle-tag {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            padding: 6px 12px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* ── Main Layout ────────────────────────── */
+        .main {
+            position: relative;
+            z-index: 1;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 28px 32px;
+        }
+
+        /* ── Stats Grid ─────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        .stat-card {
+            background: var(--gradient-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px 22px;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--gradient-main);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow), var(--shadow-glow);
+        }
+
+        .stat-card:hover::before { opacity: 1; }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 30px; font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -1px;
+            line-height: 1;
+        }
+
+        .stat-value.positive { color: var(--accent-green); }
+        .stat-value.negative { color: var(--accent-red); }
+        .stat-value.neutral { color: var(--text-primary); }
+
+        .stat-sub { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+        .stat-icon { font-size: 14px; position: absolute; top: 18px; right: 18px; opacity: 0.6; }
+
+        /* ── Content Grid ───────────────────────── */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) { .content-grid { grid-template-columns: 1fr; } }
+        .full-width { grid-column: 1 / -1; }
+
+        /* ── Card ───────────────────────────────── */
+        .card {
+            background: var(--gradient-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+
+        .card:hover { border-color: var(--border-glow); }
+
+        .card-header {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(6,10,19,0.3);
+        }
+
+        .card-title {
+            font-size: 14px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-body { padding: 16px 22px; max-height: 520px; overflow-y: auto; }
+
+        .card-body::-webkit-scrollbar { width: 4px; }
+        .card-body::-webkit-scrollbar-track { background: transparent; }
+        .card-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        /* ── Activity Log ──────────────────────── */
+        .activity-log {
+            padding: 18px 22px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+
+        .activity-log::-webkit-scrollbar { width: 4px; }
+        .activity-log::-webkit-scrollbar-track { background: transparent; }
+        .activity-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .log-entry { display: flex; gap: 10px; padding: 2px 0; }
+        .log-time { color: var(--text-muted); min-width: 65px; }
+        .log-type { font-weight: 600; min-width: 55px; }
+        .log-type.scan { color: var(--accent-yellow); }
+        .log-type.debate { color: var(--accent-purple); }
+        .log-type.trade { color: var(--accent-green); }
+        .log-type.guard { color: var(--accent-red); }
+        .log-type.info { color: var(--accent-blue); }
+
+        /* ── Debate Entry ───────────────────────── */
+        .debate-entry {
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 14px;
+            background: var(--bg-card-inner);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .debate-entry:hover {
+            border-color: var(--accent-purple);
+            box-shadow: 0 4px 20px rgba(168,85,247,0.08);
+        }
+
+        .debate-entry::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 3px; height: 100%;
+            border-radius: 3px 0 0 3px;
+        }
+
+        .debate-entry.buy::before { background: var(--accent-green); }
+        .debate-entry.sell::before { background: var(--accent-red); }
+        .debate-entry.hold::before { background: var(--accent-yellow); }
+
+        .debate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .debate-token {
+            font-size: 17px; font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+        }
+
+        .debate-price {
+            font-size: 12px; color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            margin-left: 10px;
+        }
+
+        .signal-badge {
+            padding: 5px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 11px; font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .signal-badge.STRONG_BUY, .signal-badge.BUY { background: var(--accent-green-dim); color: var(--accent-green); }
+        .signal-badge.HOLD { background: var(--accent-yellow-dim); color: var(--accent-yellow); }
+        .signal-badge.SELL, .signal-badge.STRONG_SELL { background: var(--accent-red-dim); color: var(--accent-red); }
+
+        .vote-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            font-size: 13px;
+        }
+
+        .vote-emoji { font-size: 16px; width: 22px; text-align: center; }
+        .vote-name { color: var(--text-secondary); width: 76px; font-weight: 500; font-size: 12px; }
+
+        .vote-bar-container {
+            flex: 1;
+            height: 8px;
+            background: rgba(6,10,19,0.6);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .vote-bar {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .vote-bar.buy { background: linear-gradient(90deg, var(--accent-green-soft), var(--accent-green)); }
+        .vote-bar.sell { background: linear-gradient(90deg, #e63956, var(--accent-red)); }
+        .vote-bar.hold { background: linear-gradient(90deg, #d4a017, var(--accent-yellow)); }
+
+        .vote-conf {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; font-weight: 600;
+            color: var(--text-muted);
+            width: 38px;
+            text-align: right;
+        }
+
+        .vote-signal {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .judge-line {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .debate-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Trade Entry ────────────────────────── */
+        .trade-entry {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(30,45,74,0.4);
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .trade-entry:last-child { border-bottom: none; }
+        .trade-entry:hover { background: rgba(30,45,74,0.15); }
+
+        .trade-action {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px; font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.5px;
+        }
+
+        .trade-action.BUY, .trade-action.DRY_RUN_BUY { background: var(--accent-green-dim); color: var(--accent-green); }
+        .trade-action.SELL, .trade-action.SL { background: var(--accent-red-dim); color: var(--accent-red); }
+        .trade-action.TP1, .trade-action.TP2 { background: var(--accent-yellow-dim); color: var(--accent-yellow); }
+
+        .trade-symbol { font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); }
+
+        /* ── Token Grid ────────────────────────── */
+        .tokens-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .token-card {
+            padding: 14px 16px;
+            background: var(--bg-card-inner);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            transition: all 0.25s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .token-card:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(34,211,238,0.04);
+        }
+
+        .token-symbol {
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            font-size: 14px;
+        }
+
+        .token-platform { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+
+        .token-mcap {
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .token-liq { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+
+        /* ── Footer ─────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 40px 32px 32px;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.8;
+            position: relative;
+            z-index: 1;
+        }
+
+        .footer a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer a:hover { color: var(--accent-cyan); }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 8px;
+        }
+
+        /* ── Empty State ────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            animation: floatIcon 3s ease-in-out infinite;
+        }
+
+        @keyframes floatIcon {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .empty-state p { font-size: 13px; margin-top: 4px; }
+
+        /* ── Animations ─────────────────────────── */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in { animation: fadeSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+        @keyframes shimmer {
+            0% { background-position: -200px 0; }
+            100% { background-position: calc(200px + 100%) 0; }
+        }
+
+        /* ── Controls ───────────────────────────── */
+        .btn {
+            padding: 8px 18px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+            background: var(--accent-blue-dim);
+        }
+
+        .btn.active {
+            background: var(--accent-green-dim);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-orb orb1"></div>
+    <div class="bg-orb orb2"></div>
+    <div class="bg-orb orb3"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">🧠</div>
+            <div>
+                <div class="logo-text">SolScout AI</div>
+                <div class="logo-sub">Multi-Agent Debate Trading on Solana</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="btn" id="btnScan" onclick="triggerScan()">
+                🔍 Trigger Scan
+            </button>
+            <div class="status-badge idle" id="statusBadge">
+                <div class="pulse"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div class="cycle-tag" id="cycleCount">Cycle #0</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Stats Grid -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <span class="stat-icon">💰</span>
+                <div class="stat-label">Total PnL</div>
+                <div class="stat-value neutral" id="pnlValue">0.0000</div>
+                <div class="stat-sub">SOL</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">📈</span>
+                <div class="stat-label">Win Rate</div>
+                <div class="stat-value neutral" id="winRate">0%</div>
+                <div class="stat-sub" id="winLoss">0W / 0L</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">⚖️</span>
+                <div class="stat-label">Debates</div>
+                <div class="stat-value neutral" id="debateCount">0</div>
+                <div class="stat-sub">Total decisions</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">🔍</span>
+                <div class="stat-label">Tokens Scanned</div>
+                <div class="stat-value neutral" id="scannedCount">0</div>
+                <div class="stat-sub">Across all cycles</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">🛡️</span>
+                <div class="stat-label">Rugs Avoided</div>
+                <div class="stat-value positive" id="rugsAvoided">0</div>
+                <div class="stat-sub">Guard Agent saves</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">📊</span>
+                <div class="stat-label">Open Positions</div>
+                <div class="stat-value neutral" id="openPositions">0</div>
+                <div class="stat-sub">Active trades</div>
+            </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card full-width" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <div class="card-title">📡 Live Activity</div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace" id="lastUpdated">—</div>
+            </div>
+            <div class="activity-log" id="activityLog">
+                <div class="log-entry">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-type info">INIT</span>
+                    <span>SolScout AI Dashboard initialized. Waiting for data...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Grid -->
+        <div class="content-grid">
+            <!-- Recent Debates -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">⚖️ Recent Debates</div>
+                    <div style="font-size:11px;color:var(--text-muted);">Last 10</div>
+                </div>
+                <div class="card-body" id="debatesList">
+                    <div class="empty-state">
+                        <div class="icon">🧠</div>
+                        <div>Waiting for first debate...</div>
+                        <p>The debate council will convene when tokens pass security screening</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trade History -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">💹 Trade History</div>
+                    <div style="font-size:11px;color:var(--text-muted);">Last 20</div>
+                </div>
+                <div class="card-body" id="tradesList">
+                    <div class="empty-state">
+                        <div class="icon">📊</div>
+                        <div>No trades yet...</div>
+                        <p>Trades will appear here when the council recommends action</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scanned Tokens -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-title">🔍 Last Scanned Tokens</div>
+                    <div style="font-size:11px;color:var(--text-muted);" id="tokenCount">0 tokens</div>
+                </div>
+                <div class="card-body" id="tokensList">
+                    <div class="empty-state">
+                        <div class="icon">🔍</div>
+                        <div>Waiting for scan...</div>
+                        <p>Token discovery runs each cycle across rankings & launchpad</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div>SolScout AI — Solana Agent Economy Hackathon: Agent Talent Show</div>
+        <div class="footer-links">
+            <a href="https://github.com/bitget-wallet-ai-lab/bitget-wallet-skill" target="_blank">Bitget Wallet Skill</a>
+            <span>•</span>
+            <span>Powered by LLM Multi-Agent Debate</span>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '';
+        let pollInterval = null;
+        let prevState = null;
+        const activityLog = [];
+
+        // ── Fetch & Update ──────────────────────
+        async function fetchState() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/state`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                updateDashboard(data);
+                prevState = data;
+            } catch (e) {
+                console.error('Fetch error:', e);
+                const badge = document.getElementById('statusBadge');
+                badge.className = 'status-badge error';
+                document.getElementById('statusText').textContent = '✕ Disconnected';
+            }
+        }
+
+        async function triggerScan() {
+            try {
+                const btn = document.getElementById('btnScan');
+                btn.classList.add('active');
+                btn.innerHTML = '⏳ Scanning...';
+                await fetch(`${API_BASE}/api/scan`, { method: 'POST' });
+                setTimeout(() => {
+                    btn.classList.remove('active');
+                    btn.innerHTML = '🔍 Trigger Scan';
+                }, 3000);
+            } catch (e) {
+                console.error('Scan trigger error:', e);
+            }
+        }
+
+        function updateDashboard(state) {
+            // Status
+            const badge = document.getElementById('statusBadge');
+            const statusText = document.getElementById('statusText');
+            badge.className = `status-badge ${state.status}`;
+            const statusLabels = {
+                idle: '● Idle', scanning: '◉ Scanning...',
+                debating: '◉ Debating...', trading: '◉ Trading...',
+                error: '✕ Error'
+            };
+            statusText.textContent = statusLabels[state.status] || state.status;
+            document.getElementById('cycleCount').textContent = `Cycle #${state.cycle_count}`;
+
+            // Last updated
+            if (state.last_updated) {
+                document.getElementById('lastUpdated').textContent = 'Updated: ' + timeAgo(state.last_updated);
+            }
+
+            // Stats
+            const stats = state.stats;
+            const pnlEl = document.getElementById('pnlValue');
+            pnlEl.textContent = (stats.total_pnl_sol >= 0 ? '+' : '') + stats.total_pnl_sol.toFixed(4);
+            pnlEl.className = `stat-value ${stats.total_pnl_sol > 0 ? 'positive' : stats.total_pnl_sol < 0 ? 'negative' : 'neutral'}`;
+
+            const wr = document.getElementById('winRate');
+            const winPct = Math.round(stats.win_rate * 100);
+            wr.textContent = winPct + '%';
+            wr.className = `stat-value ${winPct >= 50 ? 'positive' : winPct > 0 ? 'neutral' : 'neutral'}`;
+
+            document.getElementById('winLoss').textContent = `${stats.wins}W / ${stats.losses}L`;
+            document.getElementById('debateCount').textContent = stats.total_debates;
+            document.getElementById('scannedCount').textContent = stats.tokens_scanned;
+            document.getElementById('rugsAvoided').textContent = stats.rugs_avoided;
+            document.getElementById('openPositions').textContent = stats.open_positions;
+
+            // Detect state changes for activity log
+            if (prevState) {
+                if (state.status !== prevState.status) {
+                    addLog(state.status === 'scanning' ? 'scan' : state.status === 'debating' ? 'debate' : state.status === 'trading' ? 'trade' : 'info',
+                        `Status → ${state.status.toUpperCase()}`);
+                }
+                if (state.stats.total_debates > prevState.stats.total_debates) {
+                    const newDebate = state.debates[0];
+                    if (newDebate) {
+                        addLog('debate', `$${newDebate.token} → ${newDebate.signal} (${Math.round(newDebate.consensus * 100)}% consensus)`);
+                    }
+                }
+                if (state.stats.rugs_avoided > prevState.stats.rugs_avoided) {
+                    addLog('guard', `Filtered unsafe token — rug avoided!`);
+                }
+                if (state.trades.length > prevState.trades.length) {
+                    const newTrade = state.trades[0];
+                    addLog('trade', `${newTrade.action} $${newTrade.symbol} @ $${newTrade.price}`);
+                }
+            }
+
+            // Debates
+            renderDebates(state.debates);
+
+            // Trades
+            renderTrades(state.trades);
+
+            // Tokens
+            renderTokens(state.scanned_tokens);
+        }
+
+        function addLog(type, message) {
+            const now = new Date();
+            const time = now.toTimeString().slice(0, 8);
+            activityLog.unshift({ time, type, message });
+            if (activityLog.length > 50) activityLog.pop();
+            renderActivityLog();
+        }
+
+        function renderActivityLog() {
+            const container = document.getElementById('activityLog');
+            container.innerHTML = activityLog.map(l => `
+                <div class="log-entry fade-in">
+                    <span class="log-time">${l.time}</span>
+                    <span class="log-type ${l.type}">${l.type.toUpperCase()}</span>
+                    <span>${l.message}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderDebates(debates) {
+            const container = document.getElementById('debatesList');
+            if (!debates || debates.length === 0) return;
+
+            container.innerHTML = debates.slice(0, 10).map((d, i) => {
+                const signalClass = d.signal.includes('BUY') ? 'buy' : d.signal.includes('SELL') ? 'sell' : 'hold';
+                return `
+                <div class="debate-entry ${signalClass} fade-in" style="animation-delay: ${i * 0.04}s">
+                    <div class="debate-header">
+                        <div>
+                            <span class="debate-token">$${d.token}</span>
+                            <span class="debate-price">$${d.price ? d.price.toFixed(8) : '?'}</span>
+                        </div>
+                        <span class="signal-badge ${d.signal}">${d.signal.replace('_', ' ')}</span>
+                    </div>
+                    ${d.votes.map(v => `
+                        <div class="vote-row">
+                            <span class="vote-emoji">${v.emoji}</span>
+                            <span class="vote-name">${v.agent}</span>
+                            <div class="vote-bar-container">
+                                <div class="vote-bar ${getBarClass(v.signal)}" 
+                                     style="width: ${Math.max(v.confidence * 100, 5)}%"></div>
+                            </div>
+                            <span class="vote-conf">${Math.round(v.confidence * 100)}%</span>
+                            <span class="vote-signal signal-badge ${v.signal}">${v.signal.replace('_', ' ')}</span>
+                        </div>
+                    `).join('')}
+                    <div class="judge-line">⚖️ ${escapeHtml(d.judge_reasoning)}</div>
+                    <div class="debate-meta">
+                        <span>Consensus: ${Math.round(d.consensus * 100)}%</span>
+                        <span>MCap: $${formatNumber(d.market_cap)}</span>
+                        <span>${d.should_trade ? '✅ Trade' : '❌ No Trade'}</span>
+                        <span>${timeAgo(d.timestamp)}</span>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function renderTrades(trades) {
+            const container = document.getElementById('tradesList');
+            if (!trades || trades.length === 0) return;
+
+            container.innerHTML = trades.slice(0, 20).map((t, i) => `
+                <div class="trade-entry fade-in" style="animation-delay: ${i * 0.03}s">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span class="trade-action ${t.action}">${t.action.replace('_', ' ')}</span>
+                        <span class="trade-symbol">$${t.symbol}</span>
+                        ${t.signal ? `<span style="font-size:10px;color:var(--text-muted)">${t.signal}</span>` : ''}
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:${t.pnl_pct > 0 ? 'var(--accent-green)' : t.pnl_pct < 0 ? 'var(--accent-red)' : 'var(--text-secondary)'}">
+                            ${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted)">${timeAgo(t.timestamp)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderTokens(tokens) {
+            const container = document.getElementById('tokensList');
+            if (!tokens || tokens.length === 0) return;
+
+            document.getElementById('tokenCount').textContent = tokens.length + ' tokens';
+
+            container.innerHTML = `<div class="tokens-grid">` +
+                tokens.map((t, i) => `
+                    <div class="token-card fade-in" style="animation-delay: ${i * 0.03}s">
+                        <div>
+                            <div class="token-symbol">$${t.symbol}</div>
+                            <div class="token-platform">${t.platform || 'Solana'}</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="token-mcap">$${formatNumber(t.market_cap)}</div>
+                            <div class="token-liq">Liq: $${formatNumber(t.liquidity)}</div>
+                        </div>
+                    </div>
+                `).join('') + 
+            `</div>`;
+        }
+
+        // ── Helpers ─────────────────────────────
+        function getBarClass(signal) {
+            if (signal.includes('BUY')) return 'buy';
+            if (signal.includes('SELL')) return 'sell';
+            return 'hold';
+        }
+
+        function formatNumber(n) {
+            if (!n && n !== 0) return '?';
+            if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toFixed(0);
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return '';
+            const diff = (Date.now() - new Date(ts + 'Z').getTime()) / 1000;
+            if (diff < 0) return 'just now';
+            if (diff < 60) return Math.floor(diff) + 's ago';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text || '';
+            return d.innerHTML;
+        }
+
+        // ── Start Polling ───────────────────────
+        addLog('info', 'SolScout AI Dashboard connected');
+        fetchState();
+        pollInterval = setInterval(fetchState, 5000);
+    </script>
+</body>
+</html>

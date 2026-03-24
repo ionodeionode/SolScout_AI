@@ -1,0 +1,279 @@
+"""SolScout AI — Dashboard API Server
+
+FastAPI server providing real-time trading data + serving the dashboard UI.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sys
+import time
+import threading
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from config.settings import AppConfig
+from src.utils.llm import QwenLLM
+from src.data.bws_client import BitgetWalletSkill
+from src.data.scanner import TokenScanner, TokenCandidate
+from src.agent.debate import DebateCouncil, DebateResult, Signal
+from src.strategy.trader import TradingEngine
+from src.social.narrator import NarratorAgent
+from src.social.twitter import TwitterClient
+
+logger = logging.getLogger("solscout.dashboard")
+
+# ── App State ─────────────────────────────────────────────────
+app_state = {
+    "debates": [],        # Recent debate results
+    "trades": [],         # Trade history  
+    "scanned_tokens": [], # Last scan results
+    "stats": {
+        "total_trades": 0, "open_positions": 0,
+        "wins": 0, "losses": 0, "win_rate": 0,
+        "total_pnl_sol": 0, "total_debates": 0,
+        "rugs_avoided": 0, "tokens_scanned": 0,
+    },
+    "status": "idle",     # idle, scanning, debating, trading
+    "last_updated": "",
+    "cycle_count": 0,
+}
+
+# ── FastAPI App ───────────────────────────────────────────────
+app = FastAPI(title="SolScout AI Dashboard", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve static files
+DASHBOARD_DIR = Path(__file__).parent
+app.mount("/static", StaticFiles(directory=str(DASHBOARD_DIR)), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_dashboard():
+    html_path = DASHBOARD_DIR / "index.html"
+    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/state")
+async def get_state():
+    return JSONResponse(content=app_state)
+
+
+@app.get("/api/debates")
+async def get_debates():
+    return JSONResponse(content={"debates": app_state["debates"][-20:]})
+
+
+@app.get("/api/trades")
+async def get_trades():
+    return JSONResponse(content={"trades": app_state["trades"][-50:]})
+
+
+@app.get("/api/stats")
+async def get_stats():
+    return JSONResponse(content=app_state["stats"])
+
+
+@app.post("/api/scan")
+async def trigger_scan():
+    """Manually trigger a scan cycle."""
+    app_state["status"] = "scanning"
+    # The background loop will pick this up
+    return {"status": "scan_triggered"}
+
+
+# ── Background Trading Loop ──────────────────────────────────
+
+def run_trading_loop(config: AppConfig):
+    """Background loop: scan → debate → trade → narrate."""
+    skill = BitgetWalletSkill()
+    llm = QwenLLM(config.llm)
+    scanner = TokenScanner(skill, config.trading.min_liquidity_usd, config.trading.min_holders)
+    council = DebateCouncil(llm)
+    trader = TradingEngine(skill, config.wallet, config.trading)
+    narrator = NarratorAgent(llm)
+    twitter = TwitterClient(config.twitter)
+
+    dry_run = not bool(config.wallet.private_key)
+    if dry_run:
+        logger.info("⚠️  No wallet configured — DRY RUN mode")
+
+    while True:
+        try:
+            app_state["cycle_count"] += 1
+            app_state["status"] = "scanning"
+            app_state["last_updated"] = datetime.utcnow().isoformat()
+
+            # 1. Scan
+            candidates = scanner.scan_trending(limit=10)
+            lp = scanner.scan_launchpad(limit=10)
+            all_candidates = scanner._deduplicate(candidates + lp)
+            app_state["tokens_scanned"] = len(all_candidates)
+
+            scanned_list = []
+            for c in all_candidates[:10]:
+                scanned_list.append({
+                    "symbol": c.symbol, "name": c.name,
+                    "price": c.price, "market_cap": c.market_cap,
+                    "liquidity": c.liquidity, "holders": c.holders,
+                    "platform": c.platform, "contract": c.contract[:16] + "...",
+                })
+            app_state["scanned_tokens"] = scanned_list
+
+            # 2. Enrich & Filter
+            safe_tokens = []
+            for c in all_candidates[:8]:
+                c = scanner.enrich_candidate(c)
+                passed, reason = scanner.quick_filter(c)
+                if passed:
+                    safe_tokens.append(c)
+                else:
+                    app_state["stats"]["rugs_avoided"] += 1
+
+            app_state["stats"]["tokens_scanned"] += len(all_candidates)
+
+            # 3. Debate
+            app_state["status"] = "debating"
+            for token in safe_tokens[:3]:
+                result = council.debate(token)
+                app_state["stats"]["total_debates"] += 1
+
+                # Store debate result
+                debate_entry = {
+                    "token": token.symbol,
+                    "contract": token.contract[:16] + "...",
+                    "price": token.price,
+                    "market_cap": token.market_cap,
+                    "signal": result.final_signal.name,
+                    "consensus": round(result.consensus_score, 2),
+                    "should_trade": result.should_trade,
+                    "size_pct": result.recommended_size_pct,
+                    "judge_reasoning": result.judge_reasoning[:200],
+                    "votes": [
+                        {
+                            "agent": v.agent_name, "emoji": v.agent_emoji,
+                            "signal": v.signal.name,
+                            "confidence": round(v.confidence, 2),
+                            "reasoning": v.reasoning[:100],
+                        }
+                        for v in result.votes
+                    ],
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                app_state["debates"].insert(0, debate_entry)
+                app_state["debates"] = app_state["debates"][:50]  # Keep last 50
+
+                # 4. Trade
+                if result.should_trade:
+                    app_state["status"] = "trading"
+                    if not dry_run:
+                        trade = trader.execute_buy(result)
+                        if trade:
+                            trade_entry = {
+                                "symbol": trade.token_symbol,
+                                "action": trade.action,
+                                "amount": trade.amount,
+                                "price": trade.price,
+                                "sol_amount": trade.sol_amount,
+                                "pnl_pct": trade.pnl_pct,
+                                "timestamp": trade.timestamp,
+                                "signal": trade.debate_signal,
+                            }
+                            app_state["trades"].insert(0, trade_entry)
+
+                            # Post to X
+                            tweets = narrator.narrate_debate(result, trade)
+                            twitter.post_debate_result(tweets)
+                    else:
+                        # Dry run — still narrate
+                        tweets = narrator.narrate_debate(result)
+                        twitter.post_debate_result(tweets)
+
+                        app_state["trades"].insert(0, {
+                            "symbol": token.symbol,
+                            "action": "DRY_RUN_BUY",
+                            "amount": 0, "price": token.price,
+                            "sol_amount": 0, "pnl_pct": 0,
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "signal": result.final_signal.name,
+                        })
+
+            # 5. Check positions
+            if not dry_run:
+                actions = trader.check_positions()
+                for action in actions:
+                    app_state["trades"].insert(0, {
+                        "symbol": action.token_symbol,
+                        "action": action.action,
+                        "amount": action.amount,
+                        "price": action.price,
+                        "sol_amount": action.sol_amount,
+                        "pnl_pct": action.pnl_pct,
+                        "timestamp": action.timestamp,
+                    })
+
+            # 6. Update stats
+            stats = trader.get_stats()
+            app_state["stats"].update(stats)
+            app_state["status"] = "idle"
+            app_state["last_updated"] = datetime.utcnow().isoformat()
+
+        except Exception as e:
+            logger.error(f"Loop error: {e}")
+            app_state["status"] = "error"
+
+        time.sleep(config.trading.scan_interval_seconds)
+
+
+def start_server(host: str = "0.0.0.0", port: int = 8888):
+    """Start dashboard server with background trading loop."""
+    import uvicorn
+
+    config = AppConfig.from_env()
+
+    print(f"""
+╔══════════════════════════════════════════════════════════╗
+║  🧠 SolScout AI Dashboard                                ║
+║  🌐 http://localhost:{port:<5}                              ║
+║  📡 API: /api/state | /api/debates | /api/trades          ║
+║  🎮 Controls: /api/scan (POST) — trigger manual scan      ║
+║  ⏹️  Press Ctrl+C to stop                                  ║
+╚══════════════════════════════════════════════════════════╝
+    """)
+
+    # Start trading loop in background thread
+    loop_thread = threading.Thread(
+        target=run_trading_loop,
+        args=(config,),
+        daemon=True,
+    )
+    loop_thread.start()
+    logger.info("🤖 Trading loop started in background")
+
+    # Start web server
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    start_server()
