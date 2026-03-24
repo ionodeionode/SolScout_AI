@@ -11,3 +11,6 @@ node_modules/
 .vscode/
 docs/upload_*.py
 docs/upload_*.ps1
+docs/X_Article*
+docs/*_draft*
+docs/*_personal*
