@@ -27,7 +27,7 @@ if [ -d "$REPO_DIR" ]; then
     cd "$REPO_DIR"
     git pull
 else
-    git clone https://github.com/your-username/solscout-ai.git "$REPO_DIR"
+    git clone https://github.com/ionodeionode/SolScout_AI.git "$REPO_DIR"
     cd "$REPO_DIR"
 fi
 
