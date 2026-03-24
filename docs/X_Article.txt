@@ -1,0 +1,138 @@
+SolScout AI — What Happens When 4 AI Agents Must Argue Before Every Trade?
+
+Most trading bots are lonely creatures.
+
+One algorithm. One perspective. One signal fires, and the bot executes. No second opinion. No dissent. No one to say "wait — have you checked the dev's wallet history?"
+
+That's been the standard.
+
+We thought we could do better.
+
+---
+
+The Idea That Started Everything
+
+We kept asking ourselves one question:
+
+"If a hedge fund wouldn't let one analyst make a $50M decision alone, why do we let a single bot trade our money with zero debate?"
+
+The answer was obvious. We shouldn't.
+
+So we built SolScout AI — an autonomous Solana memecoin trading agent where a council of 4 specialized AI agents must debate every single trade before a single token moves.
+
+No unanimous agreement? No trade.
+
+Security risk detected? Automatic veto. No exceptions.
+
+---
+
+Meet the Council
+
+Every token that SolScout discovers goes through a debate — a structured, multi-agent deliberation where each specialist brings their expertise to the table:
+
+The Analyst studies the charts. Price action, volume patterns, RSI, momentum indicators. They answer: "Is the technical setup actually favorable, or is this a dead cat bounce?"
+
+The Sentinel monitors the social landscape. Community strength, narrative quality, organic vs. manufactured hype. They answer: "Is there real interest behind this, or just bot-driven noise?"
+
+The Guard runs deep security checks. Rug pull history, honeypot detection, hidden sell taxes, developer wallet analysis. They answer: "Should we trust this contract with our money?"
+
+The Whale Tracker follows smart money. Holder concentration, accumulation patterns, buy/sell pressure ratios. They answer: "Are insiders loading up, or are they quietly exiting?"
+
+The Judge listens to all four, applies contrarian reasoning, and delivers the final verdict.
+
+Each agent votes independently — STRONG_BUY, BUY, HOLD, SELL, or STRONG_SELL — with a confidence percentage. Only when consensus emerges does a trade become possible.
+
+---
+
+The Rule That Saves Everything
+
+Here's the architectural decision we're most proud of:
+
+If the Guard votes STRONG_SELL with confidence above 60%, the trade is instantly killed. No matter what the other three agents say.
+
+We call it the Guard Veto.
+
+During our first live run, a token called $ci yuan looked promising. The Analyst liked the momentum. The Sentinel saw chatter. The Whale Tracker noticed some accumulation.
+
+But the Guard dug deeper.
+
+It found a developer address linked to a history of abandoned projects. Confidence score: 96%.
+
+VETO. Trade blocked. Capital preserved.
+
+No negotiation. No override. The Guard exists to protect the portfolio, and when it speaks with conviction, the entire system listens.
+
+This is our philosophy: the best trade is sometimes no trade at all.
+
+---
+
+What We Built (The Stack)
+
+SolScout runs entirely on Bitget Wallet Skill (BWS) — the SDK that gives our agent on-chain superpowers:
+
+Discovery: BWS rankings API scans topGainers, hotPicks, and launchpad tokens (pump.fun, raydium, trends.fun) every 2 minutes
+
+Security: BWS security_audit() + dev_analysis() eliminates dangerous tokens before they even reach the debate
+
+Execution: 5-step gasless swap flow — get_quote, confirm_trade, make_order, sign_transaction, send_transaction
+
+Intelligence: LLM-powered agents via OpenAI-compatible API deliver structured JSON analysis for every debate
+
+Dashboard: Real-time FastAPI server with a premium glassmorphism UI — watch every scan, every debate, every decision as it happens
+
+Narration: Auto-generated X threads that explain each trade decision transparently — because the best agents don't just trade, they teach
+
+---
+
+First Run: The Numbers
+
+Our autonomous demo scanned 72 tokens across three data sources.
+
+$dapang — Verdict: SELL at 82% consensus. Post-spike fatigue, zero social presence, heavy selling pressure.
+
+$ci yuan — Verdict: STRONG_SELL, VETOED. Guard detected dev rug history with 96% confidence.
+
+$TESSA — Verdict: HOLD at 74% consensus. Neutral setup, weak narrative, no clear entry signal.
+
+Three debates. Three smart decisions to not trade. Zero losses.
+
+In memecoin trading, staying alive is the game. The agents that survive are the ones that make money.
+
+---
+
+The Position Sizing Logic
+
+When the council does reach a BUY consensus (confidence above 60%, security PASS), the trading engine sizes positions carefully:
+
+Maximum position: 5% of portfolio
+Take Profit 1: +30% — sell 50%
+Take Profit 2: +60% — sell remaining
+Stop Loss: -15% — exit entirely
+Slippage tolerance: 15%
+
+Conservative? Yes. But we're building for sustainable profitability, not one lucky moonshot.
+
+---
+
+Why This Matters
+
+The agent economy isn't about building smarter bots.
+
+It's about building systems of agents that challenge each other.
+
+A single agent with perfect logic can still be wrong. But four agents with different specializations? They catch each other's blind spots. They argue. They dissent. And from that friction, better decisions emerge.
+
+SolScout AI proves that multi-agent debate isn't just a research concept — it's a practical trading architecture that protects capital, generates alpha, and does it all transparently.
+
+---
+
+Links
+
+GitHub: https://github.com/ionodeionode/SolScout_AI
+Agent Wallet: yhmUntYFWhRKLnKAssoMCuu5qbpAsrZi4JorfWYchrM
+Built with: Bitget Wallet Skill + Python + FastAPI
+Hackathon: Solana Agent Economy — Agent Talent Show
+
+SolScout AI — because your money deserves a debate, not a guess.
+
+@BitgetWallet @trendsdotfun @solana_devs #AgentTalentShow

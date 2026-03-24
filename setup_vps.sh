@@ -44,7 +44,7 @@ echo ""
 echo "🔧 [4/6] Setting up Bitget Wallet Skill SDK..."
 mkdir -p vendor
 if [ ! -d "vendor/bitget-wallet-skill" ]; then
-    git clone https://github.com/nicola-xrpl/bitget-wallet-skill.git vendor/bitget-wallet-skill
+    git clone https://github.com/bitget-wallet-ai-lab/bitget-wallet-skill.git vendor/bitget-wallet-skill
 fi
 cd vendor/bitget-wallet-skill
 npm install
