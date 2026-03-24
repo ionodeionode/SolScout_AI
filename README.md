@@ -40,7 +40,7 @@ SolScout deploys **4 specialized agents + 1 judge**:
 
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/solscout-ai.git
+git clone https://github.com/ionodeionode/solscout-ai.git
 cd solscout-ai
 
 # 2. Install
