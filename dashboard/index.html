@@ -577,6 +577,37 @@
             border-color: var(--accent-green);
             color: var(--accent-green);
         }
+
+        /* ── Tab Navigation ─────────────────────── */
+        .tab-nav { display: flex; gap: 4px; background: var(--bg-card); border-radius: 12px; padding: 4px; border: 1px solid var(--border); }
+        .tab-btn { padding: 8px 20px; border-radius: 10px; border: none; background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active { background: var(--gradient-main); color: #000; font-weight: 700; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Wallet Tracker ─────────────────────── */
+        .wallet-search { display: flex; gap: 12px; margin-bottom: 28px; }
+        .wallet-input { flex: 1; padding: 14px 20px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-family: 'JetBrains Mono', monospace; transition: border-color 0.3s; outline: none; }
+        .wallet-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 20px rgba(77,142,255,0.1); }
+        .wallet-input::placeholder { color: var(--text-muted); }
+        .btn-track { padding: 14px 32px; border-radius: var(--radius); border: none; background: var(--gradient-main); color: #000; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.3s; font-family: inherit; white-space: nowrap; }
+        .btn-track:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,245,160,0.2); }
+        .btn-track:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .wallet-result { animation: fadeSlideIn 0.4s ease both; }
+        .wallet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+        @media (max-width: 700px) { .wallet-stats { grid-template-columns: 1fr; } }
+        .token-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); transition: background 0.2s; }
+        .token-row:hover { background: var(--bg-card-hover); }
+        .token-row:last-child { border-bottom: none; }
+        .token-mint { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-blue); }
+        .token-amount { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .tx-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .tx-row:last-child { border-bottom: none; }
+        .tx-sig { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-cyan); }
+        .tx-status { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .tx-status.success { background: var(--accent-green-dim); color: var(--accent-green); }
+        .tx-status.failed { background: var(--accent-red-dim); color: var(--accent-red); }
     </style>
 </head>
 <body>
@@ -595,6 +626,10 @@
             </div>
         </div>
         <div class="header-right">
+            <div class="tab-nav">
+                <button class="tab-btn active" onclick="switchTab('agent')" id="tabAgent">🤖 Agent Live</button>
+                <button class="tab-btn" onclick="switchTab('tracker')" id="tabTracker">🔍 Wallet Tracker</button>
+            </div>
             <button class="btn" id="btnScan" onclick="triggerScan()">
                 🔍 Trigger Scan
             </button>
@@ -608,6 +643,9 @@
 
     <!-- Main Content -->
     <main class="main">
+
+    <!-- Tab: Agent Live -->
+    <div class="tab-content active" id="contentAgent">
         <!-- Stats Grid -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card">
@@ -710,6 +748,24 @@
                 </div>
             </div>
         </div>
+    </div><!-- end contentAgent -->
+
+    <!-- Tab: Wallet Tracker -->
+    <div class="tab-content" id="contentTracker">
+        <div class="wallet-search">
+            <input type="text" class="wallet-input" id="walletInput" placeholder="Enter any Solana wallet address..." spellcheck="false">
+            <button class="btn-track" id="btnTrack" onclick="trackWallet()">🔍 Track Wallet</button>
+        </div>
+
+        <div id="walletResult">
+            <div class="empty-state" style="padding:80px 20px;">
+                <div class="icon" style="font-size:48px;">🔍</div>
+                <div style="font-size:16px;color:var(--text-secondary);margin-top:12px;">Enter a Solana wallet address to view balance & holdings</div>
+                <p style="color:var(--text-muted);margin-top:8px;">No private key needed — reads public on-chain data only</p>
+            </div>
+        </div>
+    </div><!-- end contentTracker -->
+
     </main>
 
     <!-- Footer -->
@@ -726,6 +782,138 @@
         const API_BASE = '';
         let pollInterval = null;
         let prevState = null;
+
+        // ── Tab Switching ─────────────────────────
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'agent') {
+                document.getElementById('tabAgent').classList.add('active');
+                document.getElementById('contentAgent').classList.add('active');
+            } else {
+                document.getElementById('tabTracker').classList.add('active');
+                document.getElementById('contentTracker').classList.add('active');
+            }
+        }
+
+        // ── Wallet Tracker ─────────────────────────
+        async function trackWallet() {
+            const input = document.getElementById('walletInput');
+            const btn = document.getElementById('btnTrack');
+            const resultDiv = document.getElementById('walletResult');
+            const address = input.value.trim();
+
+            if (!address || address.length < 32) {
+                resultDiv.innerHTML = '<div class="empty-state" style="padding:40px;"><div class="icon">⚠️</div><div>Please enter a valid Solana wallet address</div></div>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Loading...';
+            resultDiv.innerHTML = '<div class="empty-state" style="padding:60px;"><div class="icon" style="font-size:36px;">⏳</div><div>Querying Solana blockchain...</div></div>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/wallet/${address}`);
+                const data = await resp.json();
+
+                if (data.status === 'error') {
+                    resultDiv.innerHTML = `<div class="empty-state" style="padding:40px;"><div class="icon">❌</div><div>Error: ${data.message}</div></div>`;
+                    return;
+                }
+
+                let tokensHtml = '';
+                if (data.tokens.length === 0) {
+                    tokensHtml = '<div class="empty-state" style="padding:30px;"><div class="icon">📭</div><div>No token holdings found</div></div>';
+                } else {
+                    tokensHtml = data.tokens.map(t => `
+                        <div class="token-row">
+                            <div>
+                                <div class="token-mint">${t.mint.slice(0,8)}...${t.mint.slice(-6)}</div>
+                            </div>
+                            <div class="token-amount">${t.amount.toLocaleString(undefined, {maximumFractionDigits: 4})}</div>
+                        </div>
+                    `).join('');
+                }
+
+                let txsHtml = '';
+                if (data.recent_transactions.length === 0) {
+                    txsHtml = '<div class="empty-state" style="padding:20px;"><div>No recent transactions</div></div>';
+                } else {
+                    txsHtml = data.recent_transactions.map(tx => {
+                        const time = tx.time ? new Date(tx.time * 1000).toLocaleString() : 'Unknown';
+                        return `
+                            <div class="tx-row">
+                                <span class="tx-status ${tx.status}">${tx.status === 'success' ? '✓' : '✕'}</span>
+                                <span class="tx-sig">${tx.signature}</span>
+                                <span style="flex:1;"></span>
+                                <span style="color:var(--text-muted);font-size:12px;">${time}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                resultDiv.innerHTML = `
+                    <div class="wallet-result">
+                        <div class="wallet-stats">
+                            <div class="stat-card">
+                                <span class="stat-icon">💰</span>
+                                <div class="stat-label">SOL Balance</div>
+                                <div class="stat-value positive">${data.sol_balance.toFixed(4)}</div>
+                                <div class="stat-sub">SOL</div>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon">🪙</span>
+                                <div class="stat-label">Token Holdings</div>
+                                <div class="stat-value neutral">${data.token_count}</div>
+                                <div class="stat-sub">Unique tokens</div>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon">📋</span>
+                                <div class="stat-label">Recent TXs</div>
+                                <div class="stat-value neutral">${data.recent_transactions.length}</div>
+                                <div class="stat-sub">Last transactions</div>
+                            </div>
+                        </div>
+
+                        <div class="content-grid">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">🪙 Token Holdings</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">${data.token_count} tokens</div>
+                                </div>
+                                <div class="card-body" style="max-height:400px;overflow-y:auto;">
+                                    ${tokensHtml}
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">📜 Recent Transactions</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">${data.recent_transactions.length} txs</div>
+                                </div>
+                                <div class="card-body" style="max-height:400px;overflow-y:auto;">
+                                    ${txsHtml}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text-muted);">
+                            📡 Data from Solana mainnet-beta RPC · Address: <span style="font-family:'JetBrains Mono',monospace;color:var(--accent-cyan);">${data.address.slice(0,8)}...${data.address.slice(-6)}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="empty-state" style="padding:40px;"><div class="icon">❌</div><div>Connection error: ${e.message}</div></div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔍 Track Wallet';
+            }
+        }
+
+        // Enter key support
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('walletInput');
+            if (input) input.addEventListener('keypress', e => { if (e.key === 'Enter') trackWallet(); });
+        });
         const activityLog = [];
 
         // ── Fetch & Update ──────────────────────

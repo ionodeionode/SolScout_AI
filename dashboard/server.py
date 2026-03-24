@@ -98,6 +98,83 @@ async def trigger_scan():
     return {"status": "scan_triggered"}
 
 
+# ── Wallet Tracker API ────────────────────────────────────────
+
+SOLANA_RPC = "https://api.mainnet-beta.solana.com"
+TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+
+@app.get("/api/wallet/{address}")
+async def get_wallet_info(address: str):
+    """Query on-chain wallet data: SOL balance + token holdings."""
+    import httpx
+    
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # 1. Get SOL balance
+            sol_resp = await client.post(SOLANA_RPC, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getBalance",
+                "params": [address]
+            })
+            sol_data = sol_resp.json()
+            sol_balance = sol_data.get("result", {}).get("value", 0) / 1e9
+            
+            # 2. Get token accounts
+            token_resp = await client.post(SOLANA_RPC, json={
+                "jsonrpc": "2.0", "id": 2,
+                "method": "getTokenAccountsByOwner",
+                "params": [
+                    address,
+                    {"programId": TOKEN_PROGRAM_ID},
+                    {"encoding": "jsonParsed"}
+                ]
+            })
+            token_data = token_resp.json()
+            
+            tokens = []
+            accounts = token_data.get("result", {}).get("value", [])
+            for acct in accounts:
+                info = acct.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+                token_amount = info.get("tokenAmount", {})
+                amount = float(token_amount.get("uiAmountString", "0"))
+                if amount > 0:
+                    tokens.append({
+                        "mint": info.get("mint", ""),
+                        "amount": amount,
+                        "decimals": token_amount.get("decimals", 0),
+                    })
+            
+            # 3. Get recent transactions (last 10)
+            tx_resp = await client.post(SOLANA_RPC, json={
+                "jsonrpc": "2.0", "id": 3,
+                "method": "getSignaturesForAddress",
+                "params": [address, {"limit": 10}]
+            })
+            tx_data = tx_resp.json()
+            recent_txs = []
+            for tx in tx_data.get("result", []):
+                recent_txs.append({
+                    "signature": tx.get("signature", "")[:16] + "...",
+                    "slot": tx.get("slot", 0),
+                    "time": tx.get("blockTime", 0),
+                    "status": "success" if tx.get("err") is None else "failed",
+                })
+            
+            return JSONResponse(content={
+                "address": address,
+                "sol_balance": round(sol_balance, 6),
+                "token_count": len(tokens),
+                "tokens": sorted(tokens, key=lambda t: t["amount"], reverse=True)[:20],
+                "recent_transactions": recent_txs,
+                "status": "ok"
+            })
+    except Exception as e:
+        logger.error(f"Wallet lookup error: {e}")
+        return JSONResponse(
+            content={"status": "error", "message": str(e)},
+            status_code=400
+        )
+
 # ── Background Trading Loop ──────────────────────────────────
 
 def run_trading_loop(config: AppConfig):
