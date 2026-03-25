@@ -225,46 +225,51 @@ def cmd_run(config: AppConfig):
             print(f"  Cycle #{cycle} — {time.strftime('%H:%M:%S')}")
             print(f"{'═' * 60}")
 
-            # 1. Scan
-            candidates = scanner.scan_trending(limit=10)
-            lp = scanner.scan_launchpad(limit=10)
-            all_candidates = scanner._deduplicate(candidates + lp)
-            print(f"📡 Found {len(all_candidates)} tokens")
-
-            # 2. Enrich & Filter
-            safe_tokens = []
-            for c in all_candidates[:8]:
-                c = scanner.enrich_candidate(c)
-                passed, reason = scanner.quick_filter(c)
-                if passed:
-                    safe_tokens.append(c)
-
-            print(f"🛡️ {len(safe_tokens)} passed safety filter")
-
-            # 3. Debate top candidates
-            for token in safe_tokens[:3]:
-                result = council.debate(token)
-                total_debates += 1
-                print(f"\n{result.summary()}")
-
-                # 4. Trade if signal is positive
-                if result.should_trade and not dry_run:
-                    trade = trader.execute_buy(result)
-                    if trade:
-                        tweets = narrator.narrate_debate(result, trade)
-                        print(narrator.format_thread_for_display(tweets))
-
-                elif result.should_trade and dry_run:
-                    print(f"  [DRY RUN] Would buy ${result.token.symbol} with {result.recommended_size_pct}% portfolio")
-                    # Still generate narration for demo
-                    tweets = narrator.narrate_debate(result)
-                    print(narrator.format_thread_for_display(tweets))
-
-            # 5. Check existing positions for TP/SL
+            # 1. 🚨 Monitor existing positions first! (PRIORITY)
             if not dry_run:
+                print("🕵️  Checking current positions for TP/SL signals...")
                 actions = trader.check_positions()
                 for action in actions:
                     print(f"  📋 {action.action}: ${action.token_symbol} PnL={action.pnl_pct:+.1f}%")
+
+            # 2. Check if we reached Max Open Positions limit
+            open_count = sum(1 for p in trader.positions.values() if p.status != "closed")
+            if open_count >= config.trading.max_open_positions:
+                print(f"⚠️  Max open positions reached ({open_count}/{config.trading.max_open_positions}).")
+                print("⏭️  Skipping new scans to prioritize monitoring.")
+            else:
+                # 3. Scan & filter
+                candidates = scanner.scan_trending(limit=10)
+                lp = scanner.scan_launchpad(limit=10)
+                all_candidates = scanner._deduplicate(candidates + lp)
+                print(f"📡 Found {len(all_candidates)} tokens")
+
+                safe_tokens = []
+                for c in all_candidates[:8]:
+                    c = scanner.enrich_candidate(c)
+                    passed, reason = scanner.quick_filter(c)
+                    if passed:
+                        safe_tokens.append(c)
+
+                print(f"🛡️ {len(safe_tokens)} passed safety filter")
+
+                # 4. Debate top candidates
+                for token in safe_tokens[:3]:
+                    result = council.debate(token)
+                    total_debates += 1
+                    print(f"\n{result.summary()}")
+
+                    # 5. Trade if signal is positive
+                    if result.should_trade and not dry_run:
+                        trade = trader.execute_buy(result)
+                        if trade:
+                            tweets = narrator.narrate_debate(result, trade)
+                            print(narrator.format_thread_for_display(tweets))
+
+                    elif result.should_trade and dry_run:
+                        print(f"  [DRY RUN] Would buy ${result.token.symbol} with {result.recommended_size_pct}% portfolio")
+                        tweets = narrator.narrate_debate(result)
+                        print(narrator.format_thread_for_display(tweets))
 
             # 6. Stats
             stats = trader.get_stats()

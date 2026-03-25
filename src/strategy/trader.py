@@ -175,6 +175,11 @@ class TradingEngine:
             logger.info(f"Already have position in ${token.symbol}")
             return None
 
+        open_count = sum(1 for p in self.positions.values() if p.status != "closed")
+        if open_count >= self.config.max_open_positions:
+            logger.info(f"Skipping buy for ${token.symbol} — Max positions reached ({open_count}/{self.config.max_open_positions})")
+            return None
+
         logger.info(f"🟢 BUYING ${token.symbol} with {sol_amount} SOL")
 
         try:

@@ -492,10 +492,37 @@ def run_trading_loop(config: AppConfig):
     while True:
         try:
             app_state["cycle_count"] += 1
-            app_state["status"] = "scanning"
+            app_state["status"] = "monitoring"
             app_state["last_updated"] = datetime.utcnow().isoformat()
 
-            # 1. Scan
+            # 1. 🚨 Check existing positions first! (PRIORITY)
+            if not dry_run:
+                actions = trader.check_positions()
+                for action in actions:
+                    app_state["trades"].insert(0, {
+                        "symbol": action.token_symbol,
+                        "action": action.action,
+                        "amount": action.amount,
+                        "price": action.price,
+                        "sol_amount": action.sol_amount,
+                        "pnl_pct": action.pnl_pct,
+                        "timestamp": action.timestamp,
+                    })
+
+            # 2. Check max positions limit
+            open_count = sum(1 for p in trader.positions.values() if p.status != "closed")
+            if open_count >= config.trading.max_open_positions:
+                logger.info(f"Max open positions reached ({open_count}/{config.trading.max_open_positions}). Skipping scan to prioritize monitoring.")
+                stats = trader.get_stats()
+                app_state["stats"].update(stats)
+                app_state["status"] = "idle"
+                app_state["last_updated"] = datetime.utcnow().isoformat()
+                save_state()
+                time.sleep(config.trading.scan_interval_seconds)
+                continue
+
+            app_state["status"] = "scanning"
+            # 3. Scan
             candidates = scanner.scan_trending(limit=10)
             lp = scanner.scan_launchpad(limit=10)
             all_candidates = scanner._deduplicate(candidates + lp)
@@ -588,20 +615,6 @@ def run_trading_loop(config: AppConfig):
                             "timestamp": datetime.utcnow().isoformat(),
                             "signal": result.final_signal.name,
                         })
-
-            # 5. Check positions
-            if not dry_run:
-                actions = trader.check_positions()
-                for action in actions:
-                    app_state["trades"].insert(0, {
-                        "symbol": action.token_symbol,
-                        "action": action.action,
-                        "amount": action.amount,
-                        "price": action.price,
-                        "sol_amount": action.sol_amount,
-                        "pnl_pct": action.pnl_pct,
-                        "timestamp": action.timestamp,
-                    })
 
             # 6. Update stats
             stats = trader.get_stats()

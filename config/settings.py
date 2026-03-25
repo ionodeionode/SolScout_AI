@@ -41,6 +41,7 @@ class TradingConfig:
     take_profit_1_pct: float = 25.0      # TP1: sell 50% at this % gain
     take_profit_2_pct: float = 50.0      # TP2: sell remaining at this % gain
     stop_loss_pct: float = 20.0          # SL: exit at this % loss
+    max_open_positions: int = 5          # Hard limit on number of open token positions
     min_trade_sol: float = 0.1           # Min trade size (avoid fee-eaten micro trades)
     slippage_pct: float = 15.0           # Slippage tolerance for memecoin swaps
     min_liquidity_usd: float = 5000.0    # Min liquidity to consider a token
@@ -54,6 +55,7 @@ class TradingConfig:
             take_profit_1_pct=float(os.getenv("TAKE_PROFIT_1", "25")),
             take_profit_2_pct=float(os.getenv("TAKE_PROFIT_2", "50")),
             stop_loss_pct=float(os.getenv("STOP_LOSS", "20")),
+            max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "5")),
             min_trade_sol=float(os.getenv("MIN_TRADE_SOL", "0.1")),
             slippage_pct=float(os.getenv("SLIPPAGE_PCT", "15")),
             min_liquidity_usd=float(os.getenv("MIN_LIQUIDITY_USD", "5000")),
