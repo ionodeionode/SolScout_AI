@@ -226,15 +226,27 @@ async def get_wallet_info(address: str):
             mints = [t["mint"] for t in raw_tokens]
             metadata = await _fetch_token_metadata(client, mints)
 
-            # 4. Enrich tokens
+            # 3b. Get SOL price in USD for conversion
+            sol_price_usd = 1.0
+            try:
+                skill = BitgetWalletSkill()
+                sol_info = skill.token_info("sol", "")
+                sol_price_usd = float(sol_info.get("data", {}).get("price", 0) or 140)
+                if sol_price_usd == 0:
+                    sol_price_usd = 140  # fallback
+            except Exception:
+                sol_price_usd = 140  # fallback
+
+            # 4. Enrich tokens — prices in SOL
             tokens = []
             for t in raw_tokens:
                 mint = t["mint"]
                 meta = metadata.get(mint, {})
-                current_price = meta.get("price") or None
-                if current_price == 0:
-                    current_price = None
-                current_value = (current_price * t["amount"]) if current_price else None
+                price_usd = meta.get("price") or None
+                if price_usd == 0:
+                    price_usd = None
+                price_sol = (price_usd / sol_price_usd) if price_usd else None
+                value_sol = (price_sol * t["amount"]) if price_sol else None
                 tokens.append({
                     "mint": mint,
                     "symbol": meta.get("symbol", mint[:6] + "..."),
@@ -242,8 +254,9 @@ async def get_wallet_info(address: str):
                     "logoURI": meta.get("logoURI", ""),
                     "amount": t["amount"],
                     "decimals": t["decimals"],
-                    "current_price": current_price,
-                    "current_value_usd": round(current_value, 4) if current_value else None,
+                    "current_price_sol": round(price_sol, 10) if price_sol else None,
+                    "current_value_sol": round(value_sol, 6) if value_sol else None,
+                    "sol_price_usd": sol_price_usd,
                 })
 
             # 5. Get recent transactions (last 10) — full signatures

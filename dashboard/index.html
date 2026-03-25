@@ -872,8 +872,8 @@
                         <thead><tr>
                             <th>Token</th>
                             <th>Amount</th>
-                            <th>Current Price</th>
-                            <th>Value (USD)</th>
+                            <th>Price (SOL)</th>
+                            <th>Value (SOL)</th>
                             <th class="th-tip">Avg Buy Price ↓
                                 <div class="tip-box">
                                     <strong>Average Cost Basis (Weighted Average Cost method)</strong>
@@ -891,9 +891,9 @@
                             </th>
                             <th class="th-tip">Total PNL ↓
                                 <div class="tip-box">
-                                    <strong>Total Profit/Loss (USD)</strong>
+                                    <strong>Total Profit/Loss (SOL)</strong>
                                     Calculated as: <code>(Current Price - Avg Buy Price) × Token Amount</code><br><br>
-                                    Represents the total unrealized gain or loss in USD for this position.
+                                    Represents the total unrealized gain or loss in SOL for this position.
                                 </div>
                             </th>
                         </tr></thead>
@@ -902,13 +902,13 @@
                         const logo = t.logoURI
                             ? `<img class="token-logo" src="${t.logoURI}" alt="${t.symbol}" onerror="this.outerHTML='<div class=token-logo-placeholder>${t.symbol[0]}</div>'">`
                             : `<div class="token-logo-placeholder">${(t.symbol || '?')[0]}</div>`;
-                        const price = t.current_price != null ? '$' + (t.current_price < 0.001 ? t.current_price.toExponential(2) : t.current_price.toFixed(t.current_price < 1 ? 6 : 2)) : '—';
-                        const value = t.current_value_usd != null ? '$' + t.current_value_usd.toLocaleString(undefined, {maximumFractionDigits: 2}) : '—';
+                        const priceSol = t.current_price_sol != null ? (t.current_price_sol < 0.000001 ? t.current_price_sol.toExponential(2) : t.current_price_sol.toFixed(t.current_price_sol < 0.01 ? 8 : 4)) + ' ◎' : '—';
+                        const valueSol = t.current_value_sol != null ? t.current_value_sol.toFixed(4) + ' ◎' : '—';
                         return `<tr>
                             <td><div class="token-info">${logo}<div><div class="token-sym">$${t.symbol}</div><div class="token-name-sub" title="${t.name}">${t.name}</div></div></div></td>
                             <td class="val-mono">${t.amount.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
-                            <td class="val-mono">${price}</td>
-                            <td class="val-mono">${value}</td>
+                            <td class="val-mono">${priceSol}</td>
+                            <td class="val-mono">${valueSol}</td>
                             <td class="val-mono val-muted">—</td>
                             <td class="val-mono val-muted">—</td>
                             <td class="val-mono val-muted">—</td>
