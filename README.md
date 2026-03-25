@@ -148,10 +148,10 @@ solscout-ai/
 ## Trading Strategy
 
 - **Entry:** Debate council consensus BUY + confidence > 60% + security PASS
-- **Take Profit 1:** +30% → sell 50% (lock profits)
-- **Take Profit 2:** +60% → sell remaining
-- **Stop Loss:** -15% → sell all
-- **Position Size:** Max 5% portfolio per trade
+- **Take Profit 1:** +25% → sell 50% (lock profits)
+- **Take Profit 2:** +50% → sell remaining
+- **Stop Loss:** -20% → sell all
+- **Position Size:** Max 15% portfolio per trade
 
 ## Running Tests
 
