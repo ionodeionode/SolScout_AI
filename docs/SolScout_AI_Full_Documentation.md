@@ -331,7 +331,8 @@ Premium single-page web application with **two tabs**:
 | `SLIPPAGE_PCT` | **15%** | Slippage tolerance for memecoin swaps |
 | `MIN_LIQUIDITY_USD` | **$5,000** | Min liquidity pool to consider a token |
 | `MIN_HOLDERS` | **50** | Min unique holders |
-| `SCAN_INTERVAL_SECONDS` | **120** | Seconds between scan cycles |
+| `SCAN_INTERVAL_SECONDS` | **60** | Seconds between scan cycles |
+| `MAX_OPEN_POSITIONS` | **02** | Max concurrent open token positions |
 
 ### Recommended Wallet Sizes
 
@@ -434,21 +435,32 @@ The social layer serves dual purposes:
 ### Environment Variables (.env)
 
 ```env
-# LLM Configuration
-QWEN_API_KEY=your_api_key_here
-QWEN_BASE_URL=https://api.clawo.xyz/v1
-QWEN_MODEL=clawo/gpt-5.4
+QWEN_API_KEY=sk-your-qwen-api-key-here
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen-max
 
-# Solana Wallet (for live trading)
-SOLANA_PRIVATE_KEY=your_private_key
-SOLANA_WALLET_ADDRESS=your_wallet_address
+# Solana Wallet (Agent's trading wallet)
+# Generate with: python -c "from src.utils.wallet import create_wallet; create_wallet()"
+SOLANA_PRIVATE_KEY=
+SOLANA_WALLET_ADDRESS=
 
-# Trading Parameters
-# ──────────────────────────────────────────
-# MAX_POSITION_PCT: Max % of SOL balance per trade
-#   With 1 SOL → max trade = 0.15 SOL (~$22)
-#   With 10 SOL → max trade = 1.5 SOL (~$225)
+# X/Twitter API (for Social layer - optional)
+X_API_KEY=
+X_API_SECRET=
+X_ACCESS_TOKEN=
+X_ACCESS_SECRET=
+
+# Trading Settings
+# ──────────────────────────────────────────────────
+# MAX_POSITION_PCT: Max % of SOL balance per trade (15% recommended)
+#   - With 1 SOL: max trade = 0.15 SOL (~$22)
+#   - With 10 SOL: max trade = 1.5 SOL (~$225)
 MAX_POSITION_PCT=15
+
+# Max concurrent open token positions (hard limit)
+# Recommendation: Set to 2 or 3 to save LLM API credits. When limit is reached,
+# AI Token Scanning pauses to prioritize 100% free price monitoring.
+MAX_OPEN_POSITIONS=2
 
 # Take Profit: Auto-sell when price increases
 TAKE_PROFIT_1=25         # +25% → sell 50% of position
@@ -457,22 +469,21 @@ TAKE_PROFIT_2=50         # +50% → sell remaining 50%
 # Stop Loss: Auto-exit when price drops
 STOP_LOSS=20             # -20% → sell 100% immediately
 
-# Min trade size in SOL (prevents fee-eaten micro trades)
+# Min trade size (SOL) — trades below this are skipped
+# Prevents micro trades where fees eat all profit
 MIN_TRADE_SOL=0.1
 
-# Slippage tolerance for memecoin swaps
+# Slippage tolerance (%) for memecoin swaps
 SLIPPAGE_PCT=15
 
 # Token discovery filters
-MIN_LIQUIDITY_USD=5000   # Min liquidity pool ($)
+MIN_LIQUIDITY_USD=5000   # Min liquidity pool size ($)
 MIN_HOLDERS=50           # Min unique holders
-SCAN_INTERVAL_SECONDS=120
 
-# X/Twitter (optional — for auto-narration)
-X_API_KEY=
-X_API_SECRET=
-X_ACCESS_TOKEN=
-X_ACCESS_SECRET=
+# Scan interval (seconds between each cycle)
+# Recommendation: 60s for ultra-fast Stop-Loss/Take-Profit reflexes. Price fetching
+# costs $0 and no LLM credits, so keeping this low is safe and highly recommended!
+SCAN_INTERVAL_SECONDS=60
 ```
 
 ### Dependencies (requirements.txt)
@@ -542,11 +553,11 @@ python main.py dashboard # Full dashboard + loop
 
 ### Going Live Checklist
 1. ✅ Code complete and tested
-2. ⬜ Create Solana wallet and fund with SOL
-3. ⬜ Add private key to .env
-4. ⬜ (Optional) Configure X/Twitter API keys
-5. ⬜ Deploy to cloud service
-6. ⬜ Monitor dashboard for first live trades
+2. ✅ Create Solana wallet and fund with SOL
+3. ✅ Add private key to .env
+4. ✅ (Optional) Configure X/Twitter API keys
+5. ✅ Deploy to cloud service
+6. ✅ Monitor dashboard for first live trades
 
 ---
 
