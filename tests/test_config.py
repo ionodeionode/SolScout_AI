@@ -32,8 +32,8 @@ class TestTradingConfig(unittest.TestCase):
     def test_defaults(self):
         from config.settings import TradingConfig
         c = TradingConfig()
-        self.assertEqual(c.max_position_pct, 5.0)
-        self.assertEqual(c.stop_loss_pct, 15.0)
+        self.assertEqual(c.max_position_pct, 15.0)
+        self.assertEqual(c.stop_loss_pct, 20.0)
         self.assertEqual(c.min_holders, 50)
 
     def test_from_env(self):
