@@ -78,6 +78,9 @@ def save_state():
 # ── App State ─────────────────────────────────────────────────
 app_state = _load_state()
 
+# Global trader reference (set by trading loop)
+trader: TradingEngine | None = None
+
 # ── FastAPI App ───────────────────────────────────────────────
 app = FastAPI(title="SolScout AI Dashboard", version="1.0.0")
 
@@ -321,6 +324,23 @@ async def test_buy(request: Request):
         
         logger.info(f"🧪 TEST BUY RESULT: {json.dumps(send_result)[:300]}")
         
+        # Step 6: Register position for tracking (TP/SL monitoring)
+        from src.strategy.trader import Position
+        position = Position(
+            token_contract=contract,
+            token_symbol=symbol,
+            chain="sol",
+            entry_price=price,
+            amount=out_amount,
+            sol_spent=sol_amount,
+            entry_time=datetime.utcnow().isoformat(),
+            order_id=order_id,
+            debate_signal="TEST",
+        )
+        trader.positions[contract] = position
+        trader.save_positions()
+        logger.info(f"📍 Position registered: {symbol} — will track for TP/SL")
+        
         # Record in dashboard
         app_state["trades"].insert(0, {
             "symbol": symbol,
@@ -333,6 +353,7 @@ async def test_buy(request: Request):
             "signal": "TEST",
         })
         app_state["stats"]["total_trades"] += 1
+        app_state["stats"]["open_positions"] = len(trader.positions)
         save_state()
         
         return JSONResponse(content={
@@ -356,6 +377,7 @@ async def test_buy(request: Request):
 
 def run_trading_loop(config: AppConfig):
     """Background loop: scan → debate → trade → narrate."""
+    global trader
     skill = BitgetWalletSkill()
     llm = QwenLLM(config.llm)
     scanner = TokenScanner(skill, config.trading.min_liquidity_usd, config.trading.min_holders)

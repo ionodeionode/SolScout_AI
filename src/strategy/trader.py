@@ -59,6 +59,8 @@ class TradeLog:
 class TradingEngine:
     """Manages trading operations via Bitget Wallet Skill."""
 
+    POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "positions.json")
+
     def __init__(self, skill: BitgetWalletSkill, wallet: WalletConfig, trading: TradingConfig):
         self.skill = skill
         self.wallet = wallet
@@ -66,6 +68,47 @@ class TradingEngine:
         self.positions: dict[str, Position] = {}  # contract -> Position
         self.trade_history: list[TradeLog] = []
         self.total_pnl_sol: float = 0.0
+        self._load_positions()
+
+    def _load_positions(self):
+        """Load open positions from disk."""
+        try:
+            path = os.path.abspath(self.POSITIONS_FILE)
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    saved = json.load(f)
+                for contract, data in saved.items():
+                    self.positions[contract] = Position(**data)
+                logger.info(f"Loaded {len(self.positions)} open position(s) from disk")
+        except Exception as e:
+            logger.warning(f"Failed to load positions: {e}")
+
+    def save_positions(self):
+        """Save open positions to disk."""
+        try:
+            path = os.path.abspath(self.POSITIONS_FILE)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            data = {}
+            for contract, pos in self.positions.items():
+                data[contract] = {
+                    "token_contract": pos.token_contract,
+                    "token_symbol": pos.token_symbol,
+                    "chain": pos.chain,
+                    "entry_price": pos.entry_price,
+                    "amount": pos.amount,
+                    "sol_spent": pos.sol_spent,
+                    "entry_time": pos.entry_time,
+                    "order_id": pos.order_id,
+                    "status": pos.status,
+                    "current_price": pos.current_price,
+                    "pnl_pct": pos.pnl_pct,
+                    "debate_signal": pos.debate_signal,
+                }
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Saved {len(data)} position(s)")
+        except Exception as e:
+            logger.warning(f"Failed to save positions: {e}")
 
     # ── Portfolio Info ────────────────────────────────────────────
 
@@ -226,6 +269,7 @@ class TradingEngine:
                 debate_signal=debate_result.final_signal.name,
             )
             self.positions[token.contract] = position
+            self.save_positions()
 
             trade_log = TradeLog(
                 token_symbol=token.symbol,
@@ -387,6 +431,7 @@ class TradingEngine:
             if pos.amount <= 0.001 or fraction >= 1.0:
                 pos.status = "closed"
                 del self.positions[pos.token_contract]
+            self.save_positions()
 
             trade = TradeLog(
                 token_symbol=pos.token_symbol,
