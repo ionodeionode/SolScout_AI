@@ -1,5 +1,5 @@
 import json, os
-state_file = r'C:\Users\datth\.gemini\antigravity\scratch\solscout-ai\data\state.json'
+state_file = os.path.join('data', 'state.json')
 try:
     with open(state_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
