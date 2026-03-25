@@ -419,11 +419,20 @@ class TradingEngine:
             import sys, os
             bws_scripts = os.path.join(os.path.dirname(__file__), "..", "..", "vendor", "bitget-wallet-skill", "scripts")
             sys.path.insert(0, os.path.abspath(bws_scripts))
-            from order_sign import sign_solana_txs
-            signed = sign_solana_txs(txs, self.wallet.private_key)
-            return signed
-        except ImportError:
-            logger.error("order_sign.py not found or sign function missing")
+            from order_sign import sign_order_txs_solana
+
+            # sign_order_txs_solana expects {"txs": [...]} and returns list of signed base58 strings
+            order_data = {"txs": txs}
+            signed_b58_list = sign_order_txs_solana(order_data, self.wallet.private_key)
+
+            # Set sig field on each tx item for the send API
+            for i, sig in enumerate(signed_b58_list):
+                txs[i]["sig"] = sig
+
+            logger.info(f"Signed {len(signed_b58_list)} transaction(s)")
+            return txs
+        except ImportError as e:
+            logger.error(f"order_sign.py import failed: {e}")
             return None
         except Exception as e:
             logger.error(f"Signing error: {e}")
