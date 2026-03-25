@@ -135,13 +135,76 @@ async def trigger_scan():
 SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 
+
+async def _fetch_token_metadata(client, mints: list[str]) -> dict:
+    """Fetch token name/symbol from Jupiter strict token list."""
+    meta = {}
+    try:
+        resp = await client.get(
+            "https://token.jup.ag/strict",
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            for item in resp.json():
+                addr = item.get("address", "")
+                if addr in mints:
+                    meta[addr] = {
+                        "symbol": item.get("symbol", "???"),
+                        "name": item.get("name", "Unknown Token"),
+                        "logoURI": item.get("logoURI", ""),
+                    }
+    except Exception as e:
+        logger.warning(f"Jupiter metadata fetch failed: {e}")
+
+    # Fallback: try Jupiter all list for mints not found in strict
+    missing = [m for m in mints if m not in meta]
+    if missing:
+        try:
+            resp = await client.get(
+                "https://token.jup.ag/all",
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                for item in resp.json():
+                    addr = item.get("address", "")
+                    if addr in missing:
+                        meta[addr] = {
+                            "symbol": item.get("symbol", "???"),
+                            "name": item.get("name", "Unknown Token"),
+                            "logoURI": item.get("logoURI", ""),
+                        }
+        except Exception as e:
+            logger.warning(f"Jupiter all-list fetch failed: {e}")
+    return meta
+
+
+async def _fetch_token_prices(client, mints: list[str]) -> dict:
+    """Fetch current USD prices from Jupiter Price API v2."""
+    prices = {}
+    try:
+        ids_param = ",".join(mints[:20])  # Limit to 20
+        resp = await client.get(
+            f"https://api.jup.ag/price/v2?ids={ids_param}",
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            for mint, info in data.items():
+                price = info.get("price")
+                if price is not None:
+                    prices[mint] = float(price)
+    except Exception as e:
+        logger.warning(f"Jupiter price fetch failed: {e}")
+    return prices
+
+
 @app.get("/api/wallet/{address}")
 async def get_wallet_info(address: str):
-    """Query on-chain wallet data: SOL balance + token holdings."""
+    """Query on-chain wallet data: SOL balance + token holdings + metadata."""
     import httpx
-    
+
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             # 1. Get SOL balance
             sol_resp = await client.post(SOLANA_RPC, json={
                 "jsonrpc": "2.0", "id": 1,
@@ -150,7 +213,7 @@ async def get_wallet_info(address: str):
             })
             sol_data = sol_resp.json()
             sol_balance = sol_data.get("result", {}).get("value", 0) / 1e9
-            
+
             # 2. Get token accounts
             token_resp = await client.post(SOLANA_RPC, json={
                 "jsonrpc": "2.0", "id": 2,
@@ -162,21 +225,47 @@ async def get_wallet_info(address: str):
                 ]
             })
             token_data = token_resp.json()
-            
-            tokens = []
+
+            raw_tokens = []
             accounts = token_data.get("result", {}).get("value", [])
             for acct in accounts:
                 info = acct.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
                 token_amount = info.get("tokenAmount", {})
                 amount = float(token_amount.get("uiAmountString", "0"))
                 if amount > 0:
-                    tokens.append({
+                    raw_tokens.append({
                         "mint": info.get("mint", ""),
                         "amount": amount,
                         "decimals": token_amount.get("decimals", 0),
                     })
-            
-            # 3. Get recent transactions (last 10)
+
+            raw_tokens.sort(key=lambda t: t["amount"], reverse=True)
+            raw_tokens = raw_tokens[:20]
+
+            # 3. Fetch token metadata + prices in parallel
+            mints = [t["mint"] for t in raw_tokens]
+            metadata = await _fetch_token_metadata(client, mints)
+            prices = await _fetch_token_prices(client, mints)
+
+            # 4. Enrich tokens
+            tokens = []
+            for t in raw_tokens:
+                mint = t["mint"]
+                meta = metadata.get(mint, {})
+                current_price = prices.get(mint)
+                current_value = (current_price * t["amount"]) if current_price else None
+                tokens.append({
+                    "mint": mint,
+                    "symbol": meta.get("symbol", mint[:6] + "..."),
+                    "name": meta.get("name", "Unknown Token"),
+                    "logoURI": meta.get("logoURI", ""),
+                    "amount": t["amount"],
+                    "decimals": t["decimals"],
+                    "current_price": current_price,
+                    "current_value_usd": round(current_value, 4) if current_value else None,
+                })
+
+            # 5. Get recent transactions (last 10) — full signatures
             tx_resp = await client.post(SOLANA_RPC, json={
                 "jsonrpc": "2.0", "id": 3,
                 "method": "getSignaturesForAddress",
@@ -185,18 +274,20 @@ async def get_wallet_info(address: str):
             tx_data = tx_resp.json()
             recent_txs = []
             for tx in tx_data.get("result", []):
+                sig = tx.get("signature", "")
                 recent_txs.append({
-                    "signature": tx.get("signature", "")[:16] + "...",
+                    "signature": sig,
+                    "signature_short": sig[:16] + "..." if len(sig) > 16 else sig,
                     "slot": tx.get("slot", 0),
                     "time": tx.get("blockTime", 0),
                     "status": "success" if tx.get("err") is None else "failed",
                 })
-            
+
             return JSONResponse(content={
                 "address": address,
                 "sol_balance": round(sol_balance, 6),
                 "token_count": len(tokens),
-                "tokens": sorted(tokens, key=lambda t: t["amount"], reverse=True)[:20],
+                "tokens": tokens,
                 "recent_transactions": recent_txs,
                 "status": "ok"
             })
