@@ -149,7 +149,13 @@ async def _fetch_token_metadata(client, mints: list[str]) -> dict:
             batch_items = [{"chain": "sol", "contract": m} for m in chunk_mints]
             
             result = skill.batch_token_info(batch_items)
-            data_list = result.get("data", [])
+            
+            data_payload = result.get("data", {})
+            if isinstance(data_payload, dict):
+                data_list = data_payload.get("list", [])
+            else:
+                data_list = data_payload or []
+                
             if isinstance(data_list, list):
                 for item in data_list:
                     addr = item.get("contract", "") or item.get("address", "")
