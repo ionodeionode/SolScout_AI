@@ -237,6 +237,17 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
             except Exception:
                 sol_price_usd = 140  # fallback
 
+            # 3c. Load saving positions for PNL tracking
+            saved_positions = {}
+            pos_file = Path(__file__).parent.parent / "data" / "positions.json"
+            if pos_file.exists():
+                try:
+                    import json
+                    with open(pos_file, "r") as f:
+                        saved_positions = json.load(f)
+                except Exception:
+                    pass
+
             # 4. Enrich tokens — prices in SOL
             tokens = []
             for t in raw_tokens:
@@ -247,6 +258,16 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                     price_usd = None
                 price_sol = (price_usd / sol_price_usd) if price_usd else None
                 value_sol = (price_sol * t["amount"]) if price_sol else None
+                
+                entry_sol = None
+                pnl_pct = None
+                total_pnl = None
+                if mint in saved_positions:
+                    entry_sol = saved_positions[mint].get("entry_price")
+                    if entry_sol and price_sol:
+                        pnl_pct = ((price_sol - entry_sol) / entry_sol) * 100
+                        total_pnl = (price_sol - entry_sol) * t["amount"]
+
                 tokens.append({
                     "mint": mint,
                     "symbol": meta.get("symbol", mint[:6] + "..."),
@@ -257,6 +278,9 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                     "current_price_sol": round(price_sol, 10) if price_sol else None,
                     "current_value_sol": round(value_sol, 6) if value_sol else None,
                     "sol_price_usd": sol_price_usd,
+                    "entry_price_sol": entry_sol,
+                    "pnl_pct": pnl_pct,
+                    "total_pnl_sol": total_pnl,
                 })
 
             # 5. Get recent transactions (fetch more to allow filtering spam)
