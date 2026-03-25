@@ -14,7 +14,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -173,6 +173,152 @@ async def get_wallet_info(address: str):
         return JSONResponse(
             content={"status": "error", "message": str(e)},
             status_code=400
+        )
+
+# ── Test Trade Endpoint (for verifying buy/sell flow) ────────
+
+@app.post("/api/test-buy")
+async def test_buy(request: Request):
+    """Force a test buy on a specific token — bypasses debate council."""
+    try:
+        body = await request.json()
+        contract = body.get("contract", "")
+        sol_amount = float(body.get("sol_amount", 0.1))
+        
+        if not contract:
+            return JSONResponse(
+                content={"status": "error", "message": "contract is required"},
+                status_code=400
+            )
+        
+        if sol_amount > 0.5:
+            return JSONResponse(
+                content={"status": "error", "message": "Max test amount is 0.5 SOL"},
+                status_code=400
+            )
+
+        config = AppConfig.from_env()
+        
+        if not config.wallet.private_key or config.wallet.private_key == "PASTE_YOUR_NEW_PRIVATE_KEY_HERE":
+            return JSONResponse(
+                content={"status": "error", "message": "No private key configured — set SOLANA_PRIVATE_KEY in .env"},
+                status_code=400
+            )
+        
+        skill = BitgetWalletSkill()
+        
+        # Get token info
+        token_info = skill.token_info("sol", contract)
+        token_data = token_info.get("data", {})
+        symbol = token_data.get("symbol", "???")
+        price = float(token_data.get("price", 0) or 0)
+        
+        logger.info(f"🧪 TEST BUY: {sol_amount} SOL → ${symbol} ({contract[:16]}...)")
+        
+        # Step 1: Quote
+        quote_result = skill.swap_quote(
+            from_address=config.wallet.address,
+            from_chain="sol",
+            from_symbol="SOL",
+            from_contract="",
+            from_amount=str(sol_amount),
+            to_chain="sol",
+            to_symbol=symbol,
+            to_contract=contract,
+        )
+        
+        data = quote_result.get("data", {})
+        quotes = data.get("quoteResults", [])
+        if not quotes:
+            return JSONResponse(
+                content={"status": "error", "message": f"No quotes for ${symbol}", "raw": str(quote_result)[:500]},
+                status_code=400
+            )
+        
+        best = quotes[0]
+        market = best.get("market", {})
+        market_id = market.get("id", "")
+        protocol = market.get("protocol", "")
+        out_amount = float(best.get("outAmount", 0))
+        slippage = best.get("slippageInfo", {}).get("recommendSlippage", "0.15")
+        
+        # Step 2: Confirm
+        confirm_result = skill.swap_confirm(
+            from_chain="sol", from_symbol="SOL",
+            from_contract="", from_amount=str(sol_amount),
+            from_address=config.wallet.address,
+            to_chain="sol", to_symbol=symbol,
+            to_contract=contract, to_address=config.wallet.address,
+            market=market_id, protocol=protocol, slippage=slippage,
+        )
+        
+        order_id = confirm_result.get("data", {}).get("orderId", "")
+        if not order_id:
+            return JSONResponse(
+                content={"status": "error", "message": "No orderId from confirm", "raw": str(confirm_result)[:500]},
+                status_code=400
+            )
+        
+        # Step 3: Make order
+        make_result = skill.swap_make_order(
+            order_id=order_id,
+            from_chain="sol", from_contract="",
+            from_symbol="SOL", from_address=config.wallet.address,
+            to_chain="sol", to_contract=contract,
+            to_symbol=symbol, to_address=config.wallet.address,
+            from_amount=str(sol_amount), slippage=slippage,
+            market=market_id, protocol=protocol,
+        )
+        
+        txs = make_result.get("data", {}).get("txs", [])
+        if not txs:
+            return JSONResponse(
+                content={"status": "error", "message": "No txs from makeOrder", "raw": str(make_result)[:500]},
+                status_code=400
+            )
+        
+        # Step 4: Sign
+        from src.strategy.trader import TradingEngine
+        trader = TradingEngine(skill, config.wallet, config.trading)
+        signed_txs = trader._sign_transactions(txs)
+        if not signed_txs:
+            return JSONResponse(
+                content={"status": "error", "message": "Transaction signing failed"},
+                status_code=400
+            )
+        
+        # Step 5: Send
+        send_result = skill.swap_send(order_id, signed_txs)
+        
+        logger.info(f"🧪 TEST BUY RESULT: {json.dumps(send_result)[:300]}")
+        
+        # Record in dashboard
+        app_state["trades"].insert(0, {
+            "symbol": symbol,
+            "action": "TEST_BUY",
+            "amount": out_amount,
+            "price": price,
+            "sol_amount": sol_amount,
+            "pnl_pct": 0,
+            "timestamp": datetime.utcnow().isoformat(),
+            "signal": "TEST",
+        })
+        
+        return JSONResponse(content={
+            "status": "ok",
+            "message": f"Test buy executed: {sol_amount} SOL → {out_amount} ${symbol}",
+            "order_id": order_id,
+            "token": symbol,
+            "sol_spent": sol_amount,
+            "tokens_received": out_amount,
+            "send_result": str(send_result)[:500],
+        })
+        
+    except Exception as e:
+        logger.error(f"Test buy failed: {e}")
+        return JSONResponse(
+            content={"status": "error", "message": str(e)},
+            status_code=500
         )
 
 # ── Background Trading Loop ──────────────────────────────────
