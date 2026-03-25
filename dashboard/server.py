@@ -33,21 +33,50 @@ from src.social.twitter import TwitterClient
 
 logger = logging.getLogger("solscout.dashboard")
 
+# ── State Persistence ─────────────────────────────────────────
+STATE_FILE = Path(__file__).parent.parent / "data" / "state.json"
+
+def _load_state() -> dict:
+    """Load state from disk, fallback to defaults."""
+    default = {
+        "debates": [],
+        "trades": [],
+        "scanned_tokens": [],
+        "stats": {
+            "total_trades": 0, "open_positions": 0,
+            "wins": 0, "losses": 0, "win_rate": 0,
+            "total_pnl_sol": 0, "total_debates": 0,
+            "rugs_avoided": 0, "tokens_scanned": 0,
+        },
+        "status": "idle",
+        "last_updated": "",
+        "cycle_count": 0,
+    }
+    try:
+        if STATE_FILE.exists():
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            # Merge saved into defaults (keep new keys)
+            for k in default:
+                if k in saved:
+                    default[k] = saved[k]
+            logger.info(f"Loaded state: {len(default['trades'])} trades, {default['stats']['total_debates']} debates")
+            return default
+    except Exception as e:
+        logger.warning(f"Failed to load state: {e}")
+    return default
+
+def save_state():
+    """Save state to disk."""
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(app_state, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Failed to save state: {e}")
+
 # ── App State ─────────────────────────────────────────────────
-app_state = {
-    "debates": [],        # Recent debate results
-    "trades": [],         # Trade history  
-    "scanned_tokens": [], # Last scan results
-    "stats": {
-        "total_trades": 0, "open_positions": 0,
-        "wins": 0, "losses": 0, "win_rate": 0,
-        "total_pnl_sol": 0, "total_debates": 0,
-        "rugs_avoided": 0, "tokens_scanned": 0,
-    },
-    "status": "idle",     # idle, scanning, debating, trading
-    "last_updated": "",
-    "cycle_count": 0,
-}
+app_state = _load_state()
 
 # ── FastAPI App ───────────────────────────────────────────────
 app = FastAPI(title="SolScout AI Dashboard", version="1.0.0")
@@ -303,6 +332,8 @@ async def test_buy(request: Request):
             "timestamp": datetime.utcnow().isoformat(),
             "signal": "TEST",
         })
+        app_state["stats"]["total_trades"] += 1
+        save_state()
         
         return JSONResponse(content={
             "status": "ok",
@@ -457,9 +488,13 @@ def run_trading_loop(config: AppConfig):
             app_state["status"] = "idle"
             app_state["last_updated"] = datetime.utcnow().isoformat()
 
+            # 7. Persist state to disk
+            save_state()
+
         except Exception as e:
             logger.error(f"Loop error: {e}")
             app_state["status"] = "error"
+            save_state()
 
         time.sleep(config.trading.scan_interval_seconds)
 
