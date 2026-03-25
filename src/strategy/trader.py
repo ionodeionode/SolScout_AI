@@ -262,6 +262,12 @@ class TradingEngine:
             send_result = self.skill.swap_send(order_id, signed_txs)
             logger.info(f"Send result: {json.dumps(send_result)[:200]}")
 
+            # Step 5b: Poll for on-chain confirmation
+            logger.info(f"⏳ Waiting for on-chain confirmation of buy ({order_id})...")
+            if not self._wait_for_order(order_id):
+                logger.error(f"❌ Buy transaction failed on-chain or timed out.")
+                return None
+
             # Calculate exact entry price in terms of SOL
             entry_price_sol = sol_amount / out_amount if out_amount > 0 else 0.0
 
@@ -437,6 +443,12 @@ class TradingEngine:
             # Step 5: Send
             send_result = self.skill.swap_send(order_id, signed_txs)
             logger.info(f"Sell send result: {json.dumps(send_result)[:200]}")
+
+            # Step 5b: Poll for on-chain confirmation
+            logger.info(f"⏳ Waiting for on-chain confirmation of sell ({order_id})...")
+            if not self._wait_for_order(order_id):
+                logger.error(f"❌ Sell transaction failed on-chain or timed out.")
+                return None
 
             # Calculate PnL
             sol_cost = pos.sol_spent * fraction
