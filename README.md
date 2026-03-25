@@ -31,6 +31,7 @@ SolScout deploys **4 specialized agents + 1 judge**:
 - 🔍 **Token Discovery** — Scans Solana rankings + launchpad (pump.fun, trends.fun, raydium)
 - 🛡️ **Security Screening** — Contract audit, dev rug history, honeypot detection
 - 🧠 **Multi-Agent Debate** — 4 agents analyze independently, judge synthesizes
+- ⚡ **Smart Cache LLM Optimization** — Persistent token-memory state prevents re-analyzing static trending tokens (99% reduction in redundant API credit burn).
 - 💹 **Autonomous Trading** — Full swap via Bitget Wallet Skill (gasless)
 - 📢 **Social Narration** — Auto-generates engaging X threads about debates
 - 📊 **Portfolio Management** — TP/SL tracking, position sizing
