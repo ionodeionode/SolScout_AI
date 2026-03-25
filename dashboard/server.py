@@ -137,65 +137,45 @@ TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 
 
 async def _fetch_token_metadata(client, mints: list[str]) -> dict:
-    """Fetch token name/symbol from Jupiter strict token list."""
+    """Fetch token name/symbol/price from Bitget Wallet Skill API."""
     meta = {}
+    skill = BitgetWalletSkill()
+
+    # Use batch_token_info for efficiency
     try:
-        resp = await client.get(
-            "https://token.jup.ag/strict",
-            timeout=10.0,
-        )
-        if resp.status_code == 200:
-            for item in resp.json():
-                addr = item.get("address", "")
-                if addr in mints:
+        batch_items = [{"chain": "sol", "contract": m} for m in mints]
+        result = skill.batch_token_info(batch_items)
+        data_list = result.get("data", [])
+        if isinstance(data_list, list):
+            for item in data_list:
+                addr = item.get("contract", "") or item.get("address", "")
+                if addr and addr in mints:
                     meta[addr] = {
                         "symbol": item.get("symbol", "???"),
                         "name": item.get("name", "Unknown Token"),
-                        "logoURI": item.get("logoURI", ""),
+                        "logoURI": item.get("logo", item.get("logoURI", "")),
+                        "price": float(item.get("price", 0) or 0),
                     }
     except Exception as e:
-        logger.warning(f"Jupiter metadata fetch failed: {e}")
+        logger.warning(f"BWS batch_token_info failed: {e}")
 
-    # Fallback: try Jupiter all list for mints not found in strict
+    # Fallback: individual token_info for missing mints
     missing = [m for m in mints if m not in meta]
-    if missing:
+    for mint in missing[:5]:  # Limit to 5 fallback calls
         try:
-            resp = await client.get(
-                "https://token.jup.ag/all",
-                timeout=10.0,
-            )
-            if resp.status_code == 200:
-                for item in resp.json():
-                    addr = item.get("address", "")
-                    if addr in missing:
-                        meta[addr] = {
-                            "symbol": item.get("symbol", "???"),
-                            "name": item.get("name", "Unknown Token"),
-                            "logoURI": item.get("logoURI", ""),
-                        }
+            result = skill.token_info("sol", mint)
+            data = result.get("data", {})
+            if data:
+                meta[mint] = {
+                    "symbol": data.get("symbol", mint[:6] + "..."),
+                    "name": data.get("name", "Unknown Token"),
+                    "logoURI": data.get("logo", data.get("logoURI", "")),
+                    "price": float(data.get("price", 0) or 0),
+                }
         except Exception as e:
-            logger.warning(f"Jupiter all-list fetch failed: {e}")
+            logger.warning(f"BWS token_info failed for {mint[:16]}: {e}")
+
     return meta
-
-
-async def _fetch_token_prices(client, mints: list[str]) -> dict:
-    """Fetch current USD prices from Jupiter Price API v2."""
-    prices = {}
-    try:
-        ids_param = ",".join(mints[:20])  # Limit to 20
-        resp = await client.get(
-            f"https://api.jup.ag/price/v2?ids={ids_param}",
-            timeout=10.0,
-        )
-        if resp.status_code == 200:
-            data = resp.json().get("data", {})
-            for mint, info in data.items():
-                price = info.get("price")
-                if price is not None:
-                    prices[mint] = float(price)
-    except Exception as e:
-        logger.warning(f"Jupiter price fetch failed: {e}")
-    return prices
 
 
 @app.get("/api/wallet/{address}")
@@ -242,17 +222,18 @@ async def get_wallet_info(address: str):
             raw_tokens.sort(key=lambda t: t["amount"], reverse=True)
             raw_tokens = raw_tokens[:20]
 
-            # 3. Fetch token metadata + prices in parallel
+            # 3. Fetch token metadata + prices from BWS
             mints = [t["mint"] for t in raw_tokens]
             metadata = await _fetch_token_metadata(client, mints)
-            prices = await _fetch_token_prices(client, mints)
 
             # 4. Enrich tokens
             tokens = []
             for t in raw_tokens:
                 mint = t["mint"]
                 meta = metadata.get(mint, {})
-                current_price = prices.get(mint)
+                current_price = meta.get("price") or None
+                if current_price == 0:
+                    current_price = None
                 current_value = (current_price * t["amount"]) if current_price else None
                 tokens.append({
                     "mint": mint,
