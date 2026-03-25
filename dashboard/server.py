@@ -220,10 +220,12 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                     })
 
             raw_tokens.sort(key=lambda t: t["amount"], reverse=True)
-            raw_tokens = raw_tokens[:token_limit]
+            # Fetch metadata for a larger pool to allow filtering spam out before limiting
+            pool_limit = max(50, token_limit * 3)
+            raw_tokens_pool = raw_tokens[:pool_limit]
 
             # 3. Fetch token metadata + prices from BWS
-            mints = [t["mint"] for t in raw_tokens]
+            mints = [t["mint"] for t in raw_tokens_pool]
             metadata = await _fetch_token_metadata(client, mints)
 
             # 3b. Get SOL price in USD for conversion
@@ -248,16 +250,17 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                 except Exception:
                     pass
 
-            # 4. Enrich tokens — prices in SOL
+            # 4. Enrich tokens — filter scams and prices in SOL
             tokens = []
-            for t in raw_tokens:
+            for t in raw_tokens_pool:
                 mint = t["mint"]
                 meta = metadata.get(mint, {})
                 price_usd = meta.get("price") or None
-                if price_usd == 0:
-                    price_usd = None
-                price_sol = (price_usd / sol_price_usd) if price_usd else None
-                value_sol = (price_sol * t["amount"]) if price_sol else None
+                if price_usd == 0 or price_usd is None:
+                    continue  # Ignore tokens without price (often scams or dead tokens)
+                    
+                price_sol = (price_usd / sol_price_usd)
+                value_sol = (price_sol * t["amount"])
                 
                 entry_sol = None
                 pnl_pct = None
@@ -275,13 +278,16 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                     "logoURI": meta.get("logoURI", ""),
                     "amount": t["amount"],
                     "decimals": t["decimals"],
-                    "current_price_sol": round(price_sol, 10) if price_sol else None,
-                    "current_value_sol": round(value_sol, 6) if value_sol else None,
+                    "current_price_sol": round(price_sol, 10),
+                    "current_value_sol": round(value_sol, 6),
                     "sol_price_usd": sol_price_usd,
                     "entry_price_sol": entry_sol,
                     "pnl_pct": pnl_pct,
                     "total_pnl_sol": total_pnl,
                 })
+                
+                if len(tokens) >= token_limit:
+                    break
 
             # 5. Get recent transactions (fetch more to allow filtering spam)
             tx_resp = await client.post(SOLANA_RPC, json={

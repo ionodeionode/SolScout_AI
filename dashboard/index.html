@@ -981,7 +981,7 @@
                                     <div class="card-title">🪙 Token Holdings</div>
                                     <div style="font-size:11px;color:var(--text-muted);">${data.token_count} tokens</div>
                                 </div>
-                                <div class="card-body" style="overflow:visible; padding-bottom: 0;">
+                                <div class="card-body" style="overflow:visible; padding-bottom: 0; max-height: none;">
                                     ${tokensHtml}
                                 </div>
                                 <div style="display:flex; justify-content:flex-end; padding:8px 16px; border-top:1px solid var(--border);">
@@ -997,7 +997,7 @@
                                     <div class="card-title">📜 Recent Transactions</div>
                                     <div style="font-size:11px;color:var(--text-muted);">${data.recent_transactions.length} txs</div>
                                 </div>
-                                <div class="card-body" style="overflow:visible; padding-bottom: 0;">
+                                <div class="card-body" style="overflow:visible; padding-bottom: 0; max-height: none;">
                                     ${txsHtml}
                                 </div>
                                 <div style="display:flex; justify-content:flex-end; padding:8px 16px; border-top:1px solid var(--border);">
