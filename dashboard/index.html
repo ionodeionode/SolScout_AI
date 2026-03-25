@@ -952,6 +952,9 @@
                     }).join('');
                 }
 
+                const tokenValueSol = data.tokens.reduce((sum, t) => sum + (t.current_value_sol || 0), 0);
+                const totalAssetSol = data.sol_balance + tokenValueSol;
+
                 resultDiv.innerHTML = `
                     <div class="wallet-result">
                         <div class="wallet-stats">
@@ -959,7 +962,10 @@
                                 <span class="stat-icon">💰</span>
                                 <div class="stat-label">SOL Balance</div>
                                 <div class="stat-value positive">${data.sol_balance.toFixed(4)}</div>
-                                <div class="stat-sub">SOL</div>
+                                <div class="stat-sub" style="margin-top: 6px;">
+                                    <div style="color:var(--text-muted);font-size:11px;">+ Tokens: ${tokenValueSol.toFixed(4)} ◎</div>
+                                    <strong style="color:var(--accent-green);font-size:12px;">Σ Net Worth: ${totalAssetSol.toFixed(4)} ◎</strong>
+                                </div>
                             </div>
                             <div class="stat-card">
                                 <span class="stat-icon">🪙</span>
