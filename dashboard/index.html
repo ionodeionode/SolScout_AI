@@ -466,11 +466,27 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            cursor: pointer;
+            text-decoration: none;
         }
 
         .token-card:hover {
             border-color: var(--accent-cyan);
             background: rgba(34,211,238,0.04);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(34,211,238,0.1);
+        }
+
+        .token-card .ext-icon {
+            font-size: 10px;
+            color: var(--text-muted);
+            opacity: 0;
+            transition: opacity 0.2s;
+            margin-left: 4px;
+        }
+
+        .token-card:hover .ext-icon {
+            opacity: 1;
         }
 
         .token-symbol {
@@ -1098,10 +1114,19 @@
             document.getElementById('tokenCount').textContent = tokens.length + ' tokens';
 
             container.innerHTML = `<div class="tokens-grid">` +
-                tokens.map((t, i) => `
-                    <div class="token-card fade-in" style="animation-delay: ${i * 0.03}s">
+                tokens.map((t, i) => {
+                    const dexUrl = t.contract && t.contract.length > 20
+                        ? `https://www.bitget.com/price/${t.symbol.toLowerCase()}/market`
+                        : '#';
+                    const dexScreenerUrl = t.contract && t.contract.length > 20
+                        ? `https://dexscreener.com/solana/${t.contract}`
+                        : '#';
+                    return `
+                    <div class="token-card fade-in" style="animation-delay: ${i * 0.03}s"
+                         onclick="window.open('${dexScreenerUrl}', '_blank')"
+                         title="Click to view price chart on DexScreener">
                         <div>
-                            <div class="token-symbol">$${t.symbol}</div>
+                            <div class="token-symbol">$${t.symbol} <span class="ext-icon">↗</span></div>
                             <div class="token-platform">${t.platform || 'Solana'}</div>
                         </div>
                         <div style="text-align:right">
@@ -1109,7 +1134,7 @@
                             <div class="token-liq">Liq: $${formatNumber(t.liquidity)}</div>
                         </div>
                     </div>
-                `).join('') + 
+                `}).join('') + 
             `</div>`;
         }
 

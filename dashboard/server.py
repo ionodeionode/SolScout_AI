@@ -408,7 +408,7 @@ def run_trading_loop(config: AppConfig):
                     "symbol": c.symbol, "name": c.name,
                     "price": c.price, "market_cap": c.market_cap,
                     "liquidity": c.liquidity, "holders": c.holders,
-                    "platform": c.platform, "contract": c.contract[:16] + "...",
+                    "platform": c.platform, "contract": c.contract,
                 })
             app_state["scanned_tokens"] = scanned_list
 
@@ -433,7 +433,7 @@ def run_trading_loop(config: AppConfig):
                 # Store debate result
                 debate_entry = {
                     "token": token.symbol,
-                    "contract": token.contract[:16] + "...",
+                    "contract": token.contract,
                     "price": token.price,
                     "market_cap": token.market_cap,
                     "signal": result.final_signal.name,
