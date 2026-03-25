@@ -141,21 +141,25 @@ async def _fetch_token_metadata(client, mints: list[str]) -> dict:
     meta = {}
     skill = BitgetWalletSkill()
 
-    # Use batch_token_info for efficiency
+    # Use batch_token_info in chunks to prevent API payload limits
     try:
-        batch_items = [{"chain": "sol", "contract": m} for m in mints]
-        result = skill.batch_token_info(batch_items)
-        data_list = result.get("data", [])
-        if isinstance(data_list, list):
-            for item in data_list:
-                addr = item.get("contract", "") or item.get("address", "")
-                if addr and addr in mints:
-                    meta[addr] = {
-                        "symbol": item.get("symbol", "???"),
-                        "name": item.get("name", "Unknown Token"),
-                        "logoURI": item.get("logo", item.get("logoURI", "")),
-                        "price": float(item.get("price", 0) or 0),
-                    }
+        chunk_size = 15
+        for i in range(0, len(mints), chunk_size):
+            chunk_mints = mints[i:i + chunk_size]
+            batch_items = [{"chain": "sol", "contract": m} for m in chunk_mints]
+            
+            result = skill.batch_token_info(batch_items)
+            data_list = result.get("data", [])
+            if isinstance(data_list, list):
+                for item in data_list:
+                    addr = item.get("contract", "") or item.get("address", "")
+                    if addr and addr in chunk_mints:
+                        meta[addr] = {
+                            "symbol": item.get("symbol", "???"),
+                            "name": item.get("name", "Unknown Token"),
+                            "logoURI": item.get("logo", item.get("logoURI", "")),
+                            "price": float(item.get("price", 0) or 0),
+                        }
     except Exception as e:
         logger.warning(f"BWS batch_token_info failed: {e}")
 
@@ -220,8 +224,8 @@ async def get_wallet_info(address: str, token_limit: int = 10, tx_limit: int = 1
                     })
 
             raw_tokens.sort(key=lambda t: t["amount"], reverse=True)
-            # Fetch metadata for a larger pool to allow filtering spam out before limiting
-            pool_limit = max(50, token_limit * 3)
+            # Fetch metadata for a larger pool to aggressively pierce through deep spam
+            pool_limit = max(150, token_limit * 5)
             raw_tokens_pool = raw_tokens[:pool_limit]
 
             # 3. Fetch token metadata + prices from BWS
