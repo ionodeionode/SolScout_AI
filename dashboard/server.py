@@ -259,23 +259,37 @@ async def get_wallet_info(address: str):
                     "sol_price_usd": sol_price_usd,
                 })
 
-            # 5. Get recent transactions (last 10) — full signatures
+            # 5. Get recent transactions (fetch more to allow filtering spam)
             tx_resp = await client.post(SOLANA_RPC, json={
                 "jsonrpc": "2.0", "id": 3,
                 "method": "getSignaturesForAddress",
-                "params": [address, {"limit": 10}]
+                "params": [address, {"limit": 50}]
             })
             tx_data = tx_resp.json()
             recent_txs = []
             for tx in tx_data.get("result", []):
+                # Drop failed transactions (often bots/spam or out of gas)
+                if tx.get("err") is not None:
+                    continue
+                
+                # Drop spam memos
+                memo = tx.get("memo") or ""
+                memo_lower = memo.lower()
+                is_spam = any(spam_kwd in memo_lower for spam_kwd in ["http", ".com", ".io", "claim", "airdrop", ".xyz"])
+                if is_spam:
+                    continue
+                
                 sig = tx.get("signature", "")
                 recent_txs.append({
                     "signature": sig,
                     "signature_short": sig[:16] + "..." if len(sig) > 16 else sig,
                     "slot": tx.get("slot", 0),
                     "time": tx.get("blockTime", 0),
-                    "status": "success" if tx.get("err") is None else "failed",
+                    "status": "success",
                 })
+                
+                if len(recent_txs) >= 10:
+                    break
 
             return JSONResponse(content={
                 "address": address,

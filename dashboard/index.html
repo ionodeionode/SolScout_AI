@@ -904,7 +904,7 @@
                             : `<div class="token-logo-placeholder">${(t.symbol || '?')[0]}</div>`;
                         const priceSol = t.current_price_sol != null ? (t.current_price_sol < 0.000001 ? t.current_price_sol.toExponential(2) : t.current_price_sol.toFixed(t.current_price_sol < 0.01 ? 8 : 4)) + ' ◎' : '—';
                         const valueSol = t.current_value_sol != null ? t.current_value_sol.toFixed(4) + ' ◎' : '—';
-                        return `<tr>
+                        return `<tr style="cursor: pointer; transition: background 0.2s;" onclick="window.open('https://dexscreener.com/solana/${t.mint}?maker=${data.address}', '_blank')" title="View all trades of ${t.symbol} by this wallet on DexScreener">
                             <td><div class="token-info">${logo}<div><div class="token-sym">$${t.symbol}</div><div class="token-name-sub" title="${t.name}">${t.name}</div></div></div></td>
                             <td class="val-mono">${t.amount.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
                             <td class="val-mono">${priceSol}</td>
