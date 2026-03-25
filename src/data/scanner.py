@@ -225,8 +225,10 @@ class TokenScanner:
                 name=t.get("name", ""),
                 price=float(t.get("price", 0) or 0),
                 market_cap=float(t.get("market_cap", 0) or 0),
-                liquidity=float(t.get("liquidity", 0) or 0),
+                # Rankings don't have liquidity — use turnover_24h as proxy
+                liquidity=float(t.get("liquidity", 0) or t.get("turnover_24h", 0) or 0),
                 holders=int(t.get("holders", 0) or 0),
+                volume_24h=float(t.get("turnover_24h", 0) or 0),
                 discovered_at=datetime.utcnow().isoformat(),
             ))
 
