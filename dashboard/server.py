@@ -179,7 +179,7 @@ async def _fetch_token_metadata(client, mints: list[str]) -> dict:
 
 
 @app.get("/api/wallet/{address}")
-async def get_wallet_info(address: str):
+async def get_wallet_info(address: str, limit: int = 10):
     """Query on-chain wallet data: SOL balance + token holdings + metadata."""
     import httpx
 
@@ -220,7 +220,7 @@ async def get_wallet_info(address: str):
                     })
 
             raw_tokens.sort(key=lambda t: t["amount"], reverse=True)
-            raw_tokens = raw_tokens[:20]
+            raw_tokens = raw_tokens[:limit]
 
             # 3. Fetch token metadata + prices from BWS
             mints = [t["mint"] for t in raw_tokens]
@@ -263,7 +263,7 @@ async def get_wallet_info(address: str):
             tx_resp = await client.post(SOLANA_RPC, json={
                 "jsonrpc": "2.0", "id": 3,
                 "method": "getSignaturesForAddress",
-                "params": [address, {"limit": 50}]
+                "params": [address, {"limit": max(50, limit * 3)}]
             })
             tx_data = tx_resp.json()
             recent_txs = []
@@ -288,7 +288,7 @@ async def get_wallet_info(address: str):
                     "status": "success",
                 })
                 
-                if len(recent_txs) >= 10:
+                if len(recent_txs) >= limit:
                     break
 
             return JSONResponse(content={
