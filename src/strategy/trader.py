@@ -262,12 +262,15 @@ class TradingEngine:
             send_result = self.skill.swap_send(order_id, signed_txs)
             logger.info(f"Send result: {json.dumps(send_result)[:200]}")
 
-            # Step 6: Track position
+            # Calculate exact entry price in terms of SOL
+            entry_price_sol = sol_amount / out_amount if out_amount > 0 else 0.0
+
+            # Step 6: Track position (Values in SOL)
             position = Position(
                 token_contract=token.contract,
                 token_symbol=token.symbol,
                 chain="sol",
-                entry_price=token.price,
+                entry_price=entry_price_sol,
                 amount=out_amount,
                 sol_spent=sol_amount,
                 entry_time=datetime.utcnow().isoformat(),
@@ -308,13 +311,21 @@ class TradingEngine:
                 continue
 
             try:
+                # Get token's USD price
                 price_data = self.skill.token_price(pos.chain, contract)
-                current_price = float(price_data.get("price", 0))
-                if current_price <= 0:
+                current_price_usd = float(price_data.get("price", 0))
+                
+                # Get SOL's USD price to convert token price into SOL terms
+                sol_price_data = self.skill.token_price("sol", "")
+                sol_price_usd = float(sol_price_data.get("price", 1.0))  # Default 1 to avoid ZeroDiv
+                
+                current_price_sol = current_price_usd / sol_price_usd if sol_price_usd > 0 else 0
+
+                if current_price_sol <= 0:
                     continue
 
-                pos.current_price = current_price
-                pos.pnl_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100
+                pos.current_price = current_price_sol
+                pos.pnl_pct = ((current_price_sol - pos.entry_price) / pos.entry_price) * 100
 
                 # Stop Loss
                 if pos.pnl_pct <= -self.config.stop_loss_pct:

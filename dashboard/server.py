@@ -423,13 +423,15 @@ async def test_buy(request: Request):
         
         logger.info(f"🧪 TEST BUY RESULT: {json.dumps(send_result)[:300]}")
         
-        # Step 6: Register position for tracking (TP/SL monitoring)
+        # Calculate exact entry price in terms of SOL
+        entry_price_sol = sol_amount / out_amount if out_amount > 0 else 0.0
+
         from src.strategy.trader import Position
         position = Position(
             token_contract=contract,
             token_symbol=symbol,
             chain="sol",
-            entry_price=price,
+            entry_price=entry_price_sol,
             amount=out_amount,
             sol_spent=sol_amount,
             entry_time=datetime.utcnow().isoformat(),
