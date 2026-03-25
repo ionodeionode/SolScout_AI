@@ -15,6 +15,19 @@ description: >
 - Config: `.env` (LLM API key, SOLANA_PRIVATE_KEY, MAX_OPEN_POSITIONS)
 - Dashboard: http://localhost:8888
 
+## Installation
+Two options:
+
+**Option 1 — Auto (recommended, 1 command):**
+```bash
+curl -sSL https://raw.githubusercontent.com/ionodeionode/SolScout_AI/main/setup_vps.sh | bash
+```
+Then: edit `~/solscout-ai/.env` → `sudo systemctl start solscout` → dashboard at http://<vps-ip>:8888
+
+**Option 2 — Manual:** clone repo → `pip install -r requirements.txt` → clone BWS SDK → copy `.env.example` to `.env` → fill keys → `python main.py demo` to test first.
+
+Required `.env` keys: `QWEN_API_KEY`, `SOLANA_PRIVATE_KEY`, `SOLANA_WALLET_ADDRESS`
+
 ## PnL Report
 Read `data/positions.json` → list holdings with entry_price, current_price, pnl_pct.
 Read `data/state.json` → summarize TP/SL in last 24h.
