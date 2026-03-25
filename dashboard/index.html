@@ -251,7 +251,7 @@
             background: var(--gradient-card);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            overflow: hidden;
+
             transition: border-color 0.3s;
         }
 
@@ -264,6 +264,8 @@
             align-items: center;
             justify-content: space-between;
             background: rgba(6,10,19,0.3);
+            border-top-left-radius: var(--radius);
+            border-top-right-radius: var(--radius);
         }
 
         .card-title {
@@ -634,10 +636,12 @@
 
         /* ── Tooltip ────────────────────────── */
         .th-tip { position: relative; cursor: help; border-bottom: 1px dashed var(--text-muted); }
-        .th-tip .tip-box { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); z-index: 999; background: #0f1a2e; border: 1px solid var(--border-glow); border-radius: 10px; padding: 14px 16px; width: 280px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); font-weight: 400; text-transform: none; letter-spacing: 0; box-shadow: 0 -8px 32px rgba(0,0,0,0.5); margin-bottom: 8px; margin-top: 0; }
+        .th-tip .tip-box { display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); z-index: 99999; background: #0f1a2e; border: 1px solid var(--border-glow); border-radius: 10px; padding: 14px 16px; width: 280px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); font-weight: 400; text-transform: none; letter-spacing: 0; box-shadow: 0 4px 24px rgba(0,0,0,0.8); margin: 0; }
         .th-tip .tip-box strong { color: var(--text-primary); font-size: 13px; display: block; margin-bottom: 6px; }
         .th-tip .tip-box code { background: rgba(0,245,160,0.1); color: var(--accent-green); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
         .th-tip:hover .tip-box { display: block; }
+        
+        .th-tip .tip-box::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px; border-width: 6px; border-style: solid; border-color: var(--border-glow) transparent transparent transparent; }
 
         .limit-select { background:#0a101d; color:var(--text-primary); border:1px solid var(--border); padding:4px 8px; border-radius:8px; font-size:11px; outline:none; cursor:pointer; }
 
@@ -972,7 +976,7 @@
                                     <div class="card-title">🪙 Token Holdings</div>
                                     <div style="font-size:11px;color:var(--text-muted);">${data.token_count} tokens</div>
                                 </div>
-                                <div class="card-body" style="max-height:800px;overflow-y:visible;overflow-x:auto;">
+                                <div class="card-body" style="overflow:visible; padding-bottom: 0;">
                                     ${tokensHtml}
                                 </div>
                                 <div style="display:flex; justify-content:flex-end; padding:8px 16px; border-top:1px solid var(--border);">
@@ -988,7 +992,7 @@
                                     <div class="card-title">📜 Recent Transactions</div>
                                     <div style="font-size:11px;color:var(--text-muted);">${data.recent_transactions.length} txs</div>
                                 </div>
-                                <div class="card-body" style="max-height:800px;overflow-y:auto;">
+                                <div class="card-body" style="overflow:visible; padding-bottom: 0;">
                                     ${txsHtml}
                                 </div>
                                 <div style="display:flex; justify-content:flex-end; padding:8px 16px; border-top:1px solid var(--border);">
