@@ -53,8 +53,6 @@ class TokenScanner:
     def scan_trending(self, limit: int = 20) -> list[TokenCandidate]:
         """Scan top gainers and hot picks."""
         candidates = []
-        # Reset seen tokens each scan cycle to allow re-evaluation
-        self.seen_tokens.clear()
 
         for ranking_type in ["topGainers", "Hotpicks"]:
             try:
@@ -65,7 +63,15 @@ class TokenScanner:
             except Exception as e:
                 logger.error(f"Rankings scan failed ({ranking_type}): {e}")
 
-        return self._deduplicate(candidates)[:limit]
+        # Deduplicate and filter out seen tokens
+        unique_cands = self._deduplicate(candidates)
+        new_cands = []
+        for c in unique_cands:
+            if c.contract not in self.seen_tokens:
+                self.seen_tokens.add(c.contract)
+                new_cands.append(c)
+
+        return new_cands[:limit]
 
     def scan_launchpad(self, limit: int = 20) -> list[TokenCandidate]:
         """Scan launchpad for newly launched tokens with traction."""
@@ -103,6 +109,7 @@ class TokenScanner:
                     discovered_at=datetime.utcnow().isoformat(),
                 )
                 candidates.append(candidate)
+                self.seen_tokens.add(contract)
 
             logger.info(f"[Launchpad] Found {len(candidates)} launched tokens")
         except Exception as e:
