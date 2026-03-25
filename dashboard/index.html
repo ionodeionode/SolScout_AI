@@ -1207,14 +1207,14 @@
                 const contractUrl = t.symbol && t.symbol !== 'SOL' ? `https://solscan.io/token/${t.symbol}` : '#'; // Fallback link if don't have contract
                 
                 return `
-                <tr class="fade-in" style="animation-delay: ${i * 0.03}s; cursor: pointer;" onclick="window.open('https://solscan.io/token/${t.token_contract || t.symbol}', '_blank')" title="Click to view on Solscan">
+                <tr class="fade-in" style="animation-delay: ${i * 0.03}s;">
                     <td>
                         <div class="token-info">
                             <span class="token-sym">$${t.symbol}</span>
                         </div>
                     </td>
                     <td><span class="trade-action ${t.action}">${t.action.replace('_', ' ')}</span></td>
-                    <td class="val-mono">${formatNumber(t.amount)}</td>
+                    <td class="val-mono">${t.amount.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
                     <td class="val-mono">
                         ${priceSol > 0 ? priceSol.toFixed(8) + ' <span style="font-size:9px;color:var(--text-muted)">◎</span>' : '—'}
                     </td>
