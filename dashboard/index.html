@@ -1188,21 +1188,43 @@
             const container = document.getElementById('tradesList');
             if (!trades || trades.length === 0) return;
 
-            container.innerHTML = trades.slice(0, 20).map((t, i) => `
-                <div class="trade-entry fade-in" style="animation-delay: ${i * 0.03}s">
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <span class="trade-action ${t.action}">${t.action.replace('_', ' ')}</span>
-                        <span class="trade-symbol">$${t.symbol}</span>
-                        ${t.signal ? `<span style="font-size:10px;color:var(--text-muted)">${t.signal}</span>` : ''}
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:${t.pnl_pct > 0 ? 'var(--accent-green)' : t.pnl_pct < 0 ? 'var(--accent-red)' : 'var(--text-secondary)'}">
-                            ${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct.toFixed(1)}%
+            container.innerHTML = `
+            <div style="overflow-x: auto;">
+            <table class="holdings-table" style="min-width: 500px;">
+                <thead><tr>
+                    <th>Token</th>
+                    <th>Action</th>
+                    <th>Amount</th>
+                    <th>Price (SOL)</th>
+                    <th>Value (SOL)</th>
+                    <th>% PNL</th>
+                    <th>Time</th>
+                </tr></thead>
+                <tbody>
+            ` + trades.slice(0, 20).map((t, i) => {
+                const solValue = t.sol_amount || 0;
+                const priceSol = (t.amount > 0 && solValue > 0) ? (solValue / t.amount) : 0;
+                const contractUrl = t.symbol && t.symbol !== 'SOL' ? `https://solscan.io/token/${t.symbol}` : '#'; // Fallback link if don't have contract
+                
+                return `
+                <tr class="fade-in" style="animation-delay: ${i * 0.03}s; cursor: pointer;" onclick="window.open('https://solscan.io/token/${t.token_contract || t.symbol}', '_blank')" title="Click to view on Solscan">
+                    <td>
+                        <div class="token-info">
+                            <span class="token-sym">$${t.symbol}</span>
                         </div>
-                        <div style="font-size:11px;color:var(--text-muted)">${timeAgo(t.timestamp)}</div>
-                    </div>
-                </div>
-            `).join('');
+                    </td>
+                    <td><span class="trade-action ${t.action}">${t.action.replace('_', ' ')}</span></td>
+                    <td class="val-mono">${formatNumber(t.amount)}</td>
+                    <td class="val-mono">
+                        ${priceSol > 0 ? priceSol.toFixed(8) + ' <span style="font-size:9px;color:var(--text-muted)">◎</span>' : '—'}
+                    </td>
+                    <td class="val-mono">${solValue > 0 ? solValue.toFixed(4) + ' <span style="font-size:9px;color:var(--text-muted)">◎</span>' : '—'}</td>
+                    <td class="val-mono ${t.pnl_pct > 0 ? 'val-green' : t.pnl_pct < 0 ? 'val-red' : 'val-muted'}">
+                        ${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%
+                    </td>
+                    <td style="color:var(--text-muted);font-size:11px;">${timeAgo(t.timestamp)}</td>
+                </tr>
+            `}).join('') + '</tbody></table></div>';
         }
 
         function renderTokens(tokens) {
