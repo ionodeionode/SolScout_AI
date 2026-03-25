@@ -53,6 +53,8 @@ class TokenScanner:
     def scan_trending(self, limit: int = 20) -> list[TokenCandidate]:
         """Scan top gainers and hot picks."""
         candidates = []
+        # Reset seen tokens each scan cycle to allow re-evaluation
+        self.seen_tokens.clear()
 
         for ranking_type in ["topGainers", "Hotpicks"]:
             try:
@@ -207,9 +209,15 @@ class TokenScanner:
         for t in token_list:
             contract = t.get("contract", "") or t.get("address", "")
             chain = t.get("chain", "sol")
+
+            # Only trade on Solana
+            if chain != "sol":
+                continue
+
             if not contract or contract in self.seen_tokens:
                 continue
 
+            self.seen_tokens.add(contract)
             candidates.append(TokenCandidate(
                 chain=chain,
                 contract=contract,
