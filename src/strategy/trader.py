@@ -536,6 +536,29 @@ class TradingEngine:
             logger.error(f"Signing error: {e}")
             return None
 
+    def _wait_for_order(self, order_id: str, timeout: int = 45) -> bool:
+        """Poll Bitget Wallet API for order completion status."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # Skill exposes swap_status API to check order status
+                result = self.skill.swap_status(order_id)
+                status = result.get("data", {}).get("status", "")
+                
+                # 'success' means on-chain confirmed
+                if status == "success":
+                    return True
+                elif status in ["fail", "failed", "cancelled", "error"]:
+                    logger.warning(f"Order {order_id} marked as {status} by DEX Aggregator")
+                    return False
+            except Exception as e:
+                logger.debug(f"Order poll error (retrying): {e}")
+
+            time.sleep(3)
+            
+        logger.warning(f"Order poll timed out after {timeout}s")
+        return False
+
     # ── Stats ─────────────────────────────────────────────────────
 
     def get_stats(self) -> dict:
