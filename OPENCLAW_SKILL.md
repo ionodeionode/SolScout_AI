@@ -23,6 +23,7 @@ Two options:
 curl -sSL https://raw.githubusercontent.com/ionodeionode/SolScout_AI/main/setup_vps.sh | bash
 ```
 Then: edit `~/solscout-ai/.env` → `sudo systemctl start solscout` → dashboard at http://<vps-ip>:8888
+*(Note: Auto-setup configures a 07:00 AM daily cronjob to restart the service and clear AI memory caches for fresh re-entry evaluations).*
 
 **Option 2 — Manual:** clone repo → `pip install -r requirements.txt` → clone BWS SDK → copy `.env.example` to `.env` → fill keys → `python main.py demo` to test first.
 
@@ -39,6 +40,7 @@ Output as Markdown table. If positions.json empty → "0 Active Positions" (neve
 - **Bot stops buying** → MAX_OPEN_POSITIONS reached, check count in positions.json
 - **Stuck token** → run `python clean_state.py` or remove block from state.json manually
 - **After any fix** → must restart: `python main.py run` or `systemctl restart solscout`
+- **Missing second legs (no re-entry)?** → Wait for the default 7:00 AM Cronjob to flush cache, or manually clear cache via `systemctl restart solscout`.
 
 ## Trading Logic
 - Entry: consensus BUY + confidence > 60% + security PASS

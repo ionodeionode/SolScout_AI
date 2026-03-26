@@ -14,13 +14,13 @@ echo "╚═══════════════════════�
 echo ""
 
 # ---- 1. System Dependencies ----
-echo "📦 [1/6] Installing system dependencies..."
+echo "📦 [1/7] Installing system dependencies..."
 sudo apt update -y && sudo apt upgrade -y
 sudo apt install -y python3 python3-pip python3-venv git curl nodejs npm
 
 # ---- 2. Clone Repository ----
 echo ""
-echo "📂 [2/6] Cloning SolScout AI..."
+echo "📂 [2/7] Cloning SolScout AI..."
 REPO_DIR="$HOME/solscout-ai"
 if [ -d "$REPO_DIR" ]; then
     echo "  Directory exists, pulling latest..."
@@ -33,7 +33,7 @@ fi
 
 # ---- 3. Python Virtual Environment ----
 echo ""
-echo "🐍 [3/6] Setting up Python environment..."
+echo "🐍 [3/7] Setting up Python environment..."
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -41,7 +41,7 @@ pip install -r requirements.txt
 
 # ---- 4. BWS SDK ----
 echo ""
-echo "🔧 [4/6] Setting up Bitget Wallet Skill SDK..."
+echo "🔧 [4/7] Setting up Bitget Wallet Skill SDK..."
 mkdir -p vendor
 if [ ! -d "vendor/bitget-wallet-skill" ]; then
     git clone https://github.com/bitget-wallet-ai-lab/bitget-wallet-skill.git vendor/bitget-wallet-skill
@@ -52,7 +52,7 @@ cd "$REPO_DIR"
 
 # ---- 5. Environment Config ----
 echo ""
-echo "⚙️  [5/6] Setting up environment..."
+echo "⚙️  [5/7] Setting up environment..."
 if [ ! -f ".env" ]; then
     cp .env.example .env
     echo ""
@@ -72,7 +72,7 @@ fi
 
 # ---- 6. Systemd Service ----
 echo ""
-echo "🚀 [6/6] Creating systemd service..."
+echo "🚀 [6/7] Creating systemd service..."
 sudo tee /etc/systemd/system/solscout.service > /dev/null << EOF
 [Unit]
 Description=SolScout AI Trading Agent
@@ -93,6 +93,13 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable solscout
+
+# ---- 7. Daily Restart Cronjob ----
+echo ""
+echo "⏰ [7/7] Configuring 7 AM Daily Restart Cronjob..."
+# Overwrites existing solscout cron entries to prevent duplicates
+(crontab -l 2>/dev/null | grep -v "systemctl restart solscout"; echo "0 7 * * * sudo systemctl restart solscout") | crontab -
+echo "  ↳ Setup complete: Bot will reset memory daily at 07:00."
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
