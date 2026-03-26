@@ -699,9 +699,9 @@
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card">
                 <span class="stat-icon">💰</span>
-                <div class="stat-label">Total PnL</div>
-                <div class="stat-value neutral" id="pnlValue">0.0000</div>
-                <div class="stat-sub">SOL</div>
+                <div class="stat-label">SOL Balance</div>
+                <div class="stat-value neutral" id="agentSolBalanceValue">0.0000</div>
+                <div class="stat-sub">From .env wallet</div>
             </div>
             <div class="stat-card">
                 <span class="stat-icon">📈</span>
@@ -753,7 +753,7 @@
         <!-- Content Grid -->
         <div class="content-grid">
             <!-- Recent Debates -->
-            <div class="card">
+            <div class="card full-width">
                 <div class="card-header">
                     <div class="card-title">⚖️ Recent Debates</div>
                     <div style="font-size:11px;color:var(--text-muted);">Last 10</div>
@@ -778,6 +778,20 @@
                         <div class="icon">📊</div>
                         <div>No trades yet...</div>
                         <p>Trades will appear here when the council recommends action</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Token Holdings -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🪙 Token Holdings</div>
+                    <div style="font-size:11px;color:var(--text-muted);" id="agentTokenCount">Live</div>
+                </div>
+                <div class="card-body" id="agentTokenHoldingsList">
+                    <div class="empty-state">
+                        <div class="icon">🔍</div>
+                        <div>Loading wallet holdings...</div>
                     </div>
                 </div>
             </div>
@@ -1037,6 +1051,57 @@
         const activityLog = [];
 
         // ── Fetch & Update ──────────────────────
+        window.agentWalletFetched = false;
+
+        async function fetchAgentWalletBackground(address) {
+            try {
+                const url = `${API_BASE}/api/wallet/${address}?token_limit=15&tx_limit=1`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                
+                if (data.status === 'ok') {
+                    // Update SOL Balance card
+                    document.getElementById('agentSolBalanceValue').textContent = data.sol_balance.toFixed(4);
+                    document.getElementById('agentSolBalanceValue').className = `stat-value ${data.sol_balance > 0 ? 'positive' : 'neutral'}`;
+                    
+                    document.getElementById('agentTokenCount').textContent = data.token_count + ' tokens';
+                    
+                    let tokensHtml = '';
+                    if (data.tokens.length === 0) {
+                        tokensHtml = '<div class="empty-state"><div>No tokens found</div></div>';
+                    } else {
+                        tokensHtml = `
+                        <div style="overflow-x: auto;">
+                        <table class="holdings-table" style="min-width: 300px;">
+                            <thead><tr>
+                                <th>Token</th>
+                                <th>Amount</th>
+                                <th>Price (SOL)</th>
+                                <th>Value (SOL)</th>
+                            </tr></thead>
+                            <tbody>` +
+                        data.tokens.map(t => {
+                            const logo = t.logoURI
+                                ? `<img class="token-logo" src="${t.logoURI}" alt="${t.symbol}" onerror="this.outerHTML='<div class=token-logo-placeholder>${t.symbol[0]}</div>'">`
+                                : `<div class="token-logo-placeholder">${(t.symbol || '?')[0]}</div>`;
+                            const priceSol = t.current_price_sol != null ? (t.current_price_sol < 0.000001 ? t.current_price_sol.toExponential(2) : t.current_price_sol.toFixed(t.current_price_sol < 0.01 ? 8 : 4)) + ' ◎' : '—';
+                            const valueSol = t.current_value_sol != null ? t.current_value_sol.toFixed(4) + ' ◎' : '—';
+                            
+                            return `<tr style="cursor: pointer;" onclick="window.open('https://dexscreener.com/solana/${t.mint}?maker=${address}', '_blank')" title="View on DexScreener">
+                                <td><div class="token-info">${logo}<div><div class="token-sym">$${t.symbol}</div></div></div></td>
+                                <td class="val-mono">${t.amount.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                                <td class="val-mono">${priceSol}</td>
+                                <td class="val-mono">${valueSol}</td>
+                            </tr>`;
+                        }).join('') + `</tbody></table></div>`;
+                    }
+                    document.getElementById('agentTokenHoldingsList').innerHTML = tokensHtml;
+                }
+            } catch (e) {
+                console.error('Agent wallet fetch error:', e);
+            }
+        }
+
         async function fetchState() {
             try {
                 const resp = await fetch(`${API_BASE}/api/state`);
@@ -1044,6 +1109,15 @@
                 const data = await resp.json();
                 updateDashboard(data);
                 prevState = data;
+
+                if (data.wallet_address && !window.agentWalletFetched) {
+                    window.agentWalletFetched = true;
+                    // Initial load
+                    fetchAgentWalletBackground(data.wallet_address);
+                    // Poll slowly
+                    setInterval(() => fetchAgentWalletBackground(data.wallet_address), 15000);
+                }
+
             } catch (e) {
                 console.error('Fetch error:', e);
                 const badge = document.getElementById('statusBadge');
@@ -1087,9 +1161,6 @@
 
             // Stats
             const stats = state.stats;
-            const pnlEl = document.getElementById('pnlValue');
-            pnlEl.textContent = (stats.total_pnl_sol >= 0 ? '+' : '') + stats.total_pnl_sol.toFixed(4);
-            pnlEl.className = `stat-value ${stats.total_pnl_sol > 0 ? 'positive' : stats.total_pnl_sol < 0 ? 'negative' : 'neutral'}`;
 
             const wr = document.getElementById('winRate');
             const winPct = Math.round(stats.win_rate * 100);

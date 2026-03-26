@@ -680,6 +680,7 @@ def start_server(host: str = "0.0.0.0", port: int = 8888):
     import uvicorn
 
     config = AppConfig.from_env()
+    app_state["wallet_address"] = config.wallet.address
 
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
