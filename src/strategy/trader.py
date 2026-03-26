@@ -318,16 +318,6 @@ class TradingEngine:
             if pos.status == "closed":
                 continue
 
-            # --- CIRCUIT BREAKER: Abandon Honeypots / Zero Liquidity rugs ---
-            if pos.failed_sell_attempts >= 3:
-                logger.error(f"☠️ FORCE CLOSING ${pos.token_symbol} after 3 failed sell attempts. Token likely honeypotted or zero liquidity.")
-                pos.status = "closed"
-                if contract in self.positions:
-                    del self.positions[contract]
-                self.save_positions()
-                continue
-            # -------------------------------------------------------------
-
             try:
                 # Get token's USD price
                 price_data = self.skill.token_price(pos.chain, contract)
@@ -422,10 +412,11 @@ class TradingEngine:
             # Use recommended slippage from quote, fallback to config
             base_slippage = best.get("slippageInfo", {}).get("recommendSlippage", slippage_str)
             
-            # Boost slippage for memecoins! "Instruction #3 Failed" is frequently caused by
-            # Dex Aggregator slippage limits failing against volatile micro-cap swings.
+            # Boost slippage for memecoins!
             if reason == "SL":
-                slippage = "0.20"  # 20% massive slippage for Stop-Loss (get out at all costs)
+                # Elastic Slippage: Start at 20%, grow by 10% per fail, max 50%
+                dynamic_slip = min(0.20 + (pos.failed_sell_attempts * 0.10), 0.50)
+                slippage = f"{dynamic_slip:.2f}"
             else:
                 slippage = str(max(float(base_slippage), 0.05)) # Minimum 5% for profit taking
 
