@@ -39,6 +39,7 @@ class Position:
     current_price: float = 0.0
     pnl_pct: float = 0.0
     debate_signal: str = ""
+    failed_sell_attempts: int = 0
 
 
 @dataclass
@@ -104,6 +105,7 @@ class TradingEngine:
                     "current_price": pos.current_price,
                     "pnl_pct": pos.pnl_pct,
                     "debate_signal": pos.debate_signal,
+                    "failed_sell_attempts": pos.failed_sell_attempts,
                 }
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
@@ -316,6 +318,16 @@ class TradingEngine:
             if pos.status == "closed":
                 continue
 
+            # --- CIRCUIT BREAKER: Abandon Honeypots / Zero Liquidity rugs ---
+            if pos.failed_sell_attempts >= 3:
+                logger.error(f"☠️ FORCE CLOSING ${pos.token_symbol} after 3 failed sell attempts. Token likely honeypotted or zero liquidity.")
+                pos.status = "closed"
+                if contract in self.positions:
+                    del self.positions[contract]
+                self.save_positions()
+                continue
+            # -------------------------------------------------------------
+
             try:
                 # Get token's USD price
                 price_data = self.skill.token_price(pos.chain, contract)
@@ -339,6 +351,9 @@ class TradingEngine:
                     trade = self._execute_sell(pos, "SL", 1.0)
                     if trade:
                         actions.append(trade)
+                    else:
+                        pos.failed_sell_attempts += 1
+                        self.save_positions()
 
                 # Take Profit 1  (sell 50%)
                 elif pos.pnl_pct >= self.config.take_profit_1_pct and pos.status == "open":
@@ -347,6 +362,9 @@ class TradingEngine:
                     if trade:
                         pos.status = "partial_tp"
                         actions.append(trade)
+                    else:
+                        pos.failed_sell_attempts += 1
+                        self.save_positions()
 
                 # Take Profit 2 (sell remaining)
                 elif pos.pnl_pct >= self.config.take_profit_2_pct and pos.status == "partial_tp":
@@ -354,6 +372,9 @@ class TradingEngine:
                     trade = self._execute_sell(pos, "TP2", 1.0)
                     if trade:
                         actions.append(trade)
+                    else:
+                        pos.failed_sell_attempts += 1
+                        self.save_positions()
 
             except Exception as e:
                 logger.error(f"Position check failed for {pos.token_symbol}: {e}")
