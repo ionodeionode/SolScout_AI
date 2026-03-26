@@ -373,6 +373,35 @@ class TradingEngine:
 
     def _execute_sell(self, pos: Position, reason: str, fraction: float) -> TradeLog | None:
         """Execute a sell of fraction of a position."""
+        
+        # ── REAL-TIME BALANCE RECONCILIATION ──
+        # Meme coins often contain deflationary buy taxes, which cause our internal 
+        # `pos.amount` (the theoretical quote received) to diverge from the physical SPL balance.
+        try:
+            import requests
+            resp = requests.post("https://api.mainnet-beta.solana.com", json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getTokenAccountsByOwner",
+                "params": [
+                    self.wallet.address,
+                    {"mint": pos.token_contract},
+                    {"encoding": "jsonParsed"}
+                ]
+            }, timeout=10)
+            data = resp.json()
+            accounts = data.get("result", {}).get("value", [])
+            real_amount = 0.0
+            for acct in accounts:
+                amt_str = acct.get("account", {}).get("data", {}).get("parsed", {}).get("info", {}).get("tokenAmount", {}).get("uiAmountString", "0")
+                real_amount += float(amt_str)
+            
+            if real_amount > 0 and abs(real_amount - pos.amount) > 0.0001:
+                logger.info(f"🔄 Syncing ${pos.token_symbol} state with on-chain data: {pos.amount:.4f} → {real_amount:.4f}")
+                pos.amount = real_amount
+                # We do not strictly overwrite `pos.amount` to 0 here to prevent RPC transient faults from wiping memory
+        except Exception as e:
+            logger.warning(f"Failed to sync on-chain balance for ${pos.token_symbol}: {e}")
+
         # For full exits (fraction=1.0), deduct 0.5% as a safety buffer. 
         # Floating point rounding errors between internal pos.amount and the actual SPL 
         # on-chain token balance often cause "Instruction #3 Failed" (Insufficient Balance).
