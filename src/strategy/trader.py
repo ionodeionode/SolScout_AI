@@ -426,6 +426,17 @@ class TradingEngine:
         except Exception as e:
             logger.warning(f"Failed to sync on-chain balance for ${pos.token_symbol}: {e}")
 
+        # Dust Evaluation: If absolute nominal value translates below active execution viability parameters (~0.005 SOL), 
+        # gas overhead exceeds asset capture. Terminate structural tracking of this subset token.
+        estimated_sol_value = pos.amount * getattr(pos, 'current_price', 0)
+        if estimated_sol_value > 0 and estimated_sol_value < 0.005:
+            logger.info(f"🧹 Scrubbed ${pos.token_symbol}: Remnant subset value ({estimated_sol_value:.5f} SOL) falls beneath logical economic viability.")
+            pos.status = "closed"
+            if pos.token_contract in self.positions:
+                del self.positions[pos.token_contract]
+            self.save_positions()
+            return None
+
         # For full exits (fraction=1.0), deduct 0.5% as a safety buffer. 
         # Floating point rounding errors between internal pos.amount and the actual SPL 
         # on-chain token balance often cause "Instruction #3 Failed" (Insufficient Balance).
@@ -451,10 +462,14 @@ class TradingEngine:
                 to_contract=SOL_CONTRACT,
             )
 
-            data = quote_result.get("data", {})
+            if not quote_result:
+                logger.error(f"Quote network timeout or malformed response from DEX Aggregator for ${pos.token_symbol}")
+                return None
+
+            data = quote_result.get("data") or {}
             quotes = data.get("quoteResults", [])
             if not quotes:
-                logger.error(f"No sell quotes for ${pos.token_symbol}")
+                logger.error(f"No sell quotes returned for ${pos.token_symbol} (Market may be illiquid or amount too small)")
                 return None
 
             best = quotes[0]
