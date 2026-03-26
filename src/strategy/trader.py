@@ -270,8 +270,32 @@ class TradingEngine:
                 logger.error(f"❌ Buy transaction failed on-chain or timed out.")
                 return None
 
+            # ── REAL-TIME BALANCE RECONCILIATION ──
+            # Deduct deflationary buy taxes by fetching exact SPL token balance received
+            actual_amount = out_amount
+            try:
+                # Add slight delay to allow RPC to index the transaction
+                time.sleep(2)
+                import requests
+                resp = requests.post("https://api.mainnet-beta.solana.com", json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "getTokenAccountsByOwner",
+                    "params": [
+                        self.wallet.address,
+                        {"mint": token.contract},
+                        {"encoding": "jsonParsed"}
+                    ]
+                }, timeout=10)
+                accounts = resp.json().get("result", {}).get("value", [])
+                real_balance = sum(float(acct.get("account", {}).get("data", {}).get("parsed", {}).get("info", {}).get("tokenAmount", {}).get("uiAmountString", "0")) for acct in accounts)
+                if real_balance > 0 and abs(real_balance - out_amount) > 0.0001:
+                    logger.info(f"🔄 Syncing buy deflation/slippage: quote {out_amount:.4f} → real {real_balance:.4f} ${token.symbol}")
+                    actual_amount = real_balance
+            except Exception as e:
+                logger.warning(f"Failed to sync on-chain balance after buy for ${token.symbol}: {e}")
+
             # Calculate exact entry price in terms of SOL
-            entry_price_sol = sol_amount / out_amount if out_amount > 0 else 0.0
+            entry_price_sol = sol_amount / actual_amount if actual_amount > 0 else 0.0
 
             # Step 6: Track position (Values in SOL)
             position = Position(
@@ -279,7 +303,7 @@ class TradingEngine:
                 token_symbol=token.symbol,
                 chain="sol",
                 entry_price=entry_price_sol,
-                amount=out_amount,
+                amount=actual_amount,
                 sol_spent=sol_amount,
                 entry_time=datetime.utcnow().isoformat(),
                 order_id=order_id,
@@ -292,7 +316,7 @@ class TradingEngine:
                 token_symbol=token.symbol,
                 token_contract=token.contract,
                 action="BUY",
-                amount=out_amount,
+                amount=actual_amount,
                 price=token.price,
                 sol_amount=sol_amount,
                 pnl_pct=0.0,
@@ -303,7 +327,7 @@ class TradingEngine:
             )
             self.trade_history.append(trade_log)
 
-            logger.info(f"✅ BUY complete: {sol_amount} SOL → {out_amount} ${token.symbol}")
+            logger.info(f"✅ BUY complete: {sol_amount} SOL → {actual_amount} ${token.symbol}")
             return trade_log
 
         except Exception as e:
