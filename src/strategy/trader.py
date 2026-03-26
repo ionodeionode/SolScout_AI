@@ -362,7 +362,12 @@ class TradingEngine:
 
     def _execute_sell(self, pos: Position, reason: str, fraction: float) -> TradeLog | None:
         """Execute a sell of fraction of a position."""
-        sell_amount = pos.amount * fraction
+        # For full exits (fraction=1.0), deduct 0.5% as a safety buffer. 
+        # Floating point rounding errors between internal pos.amount and the actual SPL 
+        # on-chain token balance often cause "Instruction #3 Failed" (Insufficient Balance).
+        safe_fraction = fraction * 0.995 if fraction == 1.0 else fraction
+        sell_amount = pos.amount * safe_fraction
+        sell_amount_str = f"{sell_amount:.6f}".rstrip('0').rstrip('.')
 
         logger.info(f"{'🔴' if reason == 'SL' else '🟢'} SELLING {sell_amount} ${pos.token_symbol} ({reason})")
 
@@ -376,7 +381,7 @@ class TradingEngine:
                 from_chain="sol",
                 from_symbol=pos.token_symbol,
                 from_contract=pos.token_contract,
-                from_amount=str(sell_amount),
+                from_amount=sell_amount_str,
                 to_chain="sol",
                 to_symbol=SOL_SYMBOL,
                 to_contract=SOL_CONTRACT,
@@ -394,7 +399,14 @@ class TradingEngine:
             protocol = market.get("protocol", "")
             sol_received = float(best.get("outAmount", 0))
             # Use recommended slippage from quote, fallback to config
-            slippage = best.get("slippageInfo", {}).get("recommendSlippage", slippage_str)
+            base_slippage = best.get("slippageInfo", {}).get("recommendSlippage", slippage_str)
+            
+            # Boost slippage for memecoins! "Instruction #3 Failed" is frequently caused by
+            # Dex Aggregator slippage limits failing against volatile micro-cap swings.
+            if reason == "SL":
+                slippage = "0.20"  # 20% massive slippage for Stop-Loss (get out at all costs)
+            else:
+                slippage = str(max(float(base_slippage), 0.05)) # Minimum 5% for profit taking
 
             logger.info(
                 f"Sell quote: {sell_amount} {pos.token_symbol} → {sol_received} SOL "
@@ -404,7 +416,7 @@ class TradingEngine:
             # Step 2: Confirm
             confirm_result = self.skill.swap_confirm(
                 from_chain="sol", from_symbol=pos.token_symbol,
-                from_contract=pos.token_contract, from_amount=str(sell_amount),
+                from_contract=pos.token_contract, from_amount=sell_amount_str,
                 from_address=self.wallet.address,
                 to_chain="sol", to_symbol=SOL_SYMBOL,
                 to_contract=SOL_CONTRACT, to_address=self.wallet.address,
@@ -425,7 +437,7 @@ class TradingEngine:
                 from_symbol=pos.token_symbol, from_address=self.wallet.address,
                 to_chain="sol", to_contract=SOL_CONTRACT,
                 to_symbol=SOL_SYMBOL, to_address=self.wallet.address,
-                from_amount=str(sell_amount), slippage=slippage,
+                from_amount=sell_amount_str, slippage=slippage,
                 market=market_id, protocol=protocol,
             )
 
