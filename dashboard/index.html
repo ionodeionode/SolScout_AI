@@ -701,7 +701,7 @@
                 <span class="stat-icon">💰</span>
                 <div class="stat-label">SOL Balance</div>
                 <div class="stat-value neutral" id="agentSolBalanceValue">0.0000</div>
-                <div class="stat-sub">From .env wallet</div>
+                <div class="stat-sub" id="agentSolBalanceSub">From .env wallet</div>
             </div>
             <div class="stat-card">
                 <span class="stat-icon">📈</span>
@@ -1060,9 +1060,19 @@
                 const data = await resp.json();
                 
                 if (data.status === 'ok') {
+                    // Calculate token value
+                    const tokenValueSol = data.tokens.reduce((sum, t) => sum + (t.current_value_sol || 0), 0);
+                    const totalAssetSol = data.sol_balance + tokenValueSol;
+
                     // Update SOL Balance card
                     document.getElementById('agentSolBalanceValue').textContent = data.sol_balance.toFixed(4);
                     document.getElementById('agentSolBalanceValue').className = `stat-value ${data.sol_balance > 0 ? 'positive' : 'neutral'}`;
+                    document.getElementById('agentSolBalanceSub').innerHTML = `
+                        <div style="margin-top: 6px;">
+                            <div style="color:var(--text-muted);font-size:11px;">+ Tokens: ${tokenValueSol.toFixed(4)} ◎</div>
+                            <strong style="color:var(--accent-green);font-size:12px;">Σ Net Worth: ${totalAssetSol.toFixed(4)} ◎</strong>
+                        </div>
+                    `;
                     
                     document.getElementById('agentTokenCount').textContent = data.token_count + ' tokens';
                     
